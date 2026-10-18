@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div id="shell">
     <div id="stage" aria-hidden="false"></div>
     <main id="list-view" hidden></main>
 
@@ -29,6 +30,19 @@
         <button type="button" data-view="list" aria-pressed="false">List</button>
       </div>
     </header>
+
+    <div id="winctl" role="group" aria-label="Window controls">
+      <button type="button" class="wbtn" data-win="minimize" aria-label="Minimize" title="Minimize">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" /></svg>
+      </button>
+      <button type="button" class="wbtn" data-win="maximize" id="win-max" aria-label="Maximize" title="Maximize">
+        <svg class="ico-max" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.8" /></svg>
+        <svg class="ico-restore" viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="3.8" width="6.2" height="6.2" rx="1.6" /><path d="M4 3.8V3.2a1.4 1.4 0 0 1 1.4-1.4h3.4A1.4 1.4 0 0 1 10.2 3.2v3.4A1.4 1.4 0 0 1 8.8 8H8.2" /></svg>
+      </button>
+      <button type="button" class="wbtn close" data-win="close" aria-label="Close" title="Close">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.6 2.6l6.8 6.8M9.4 2.6L2.6 9.4" /></svg>
+      </button>
+    </div>
 
     <aside id="panel" hidden aria-label="Agent details">
       <div id="panel-head"></div>
@@ -112,6 +126,11 @@
         </footer>
       </form>
     </dialog>
+    <div id="scrim" hidden></div>
+
+    <i class="grip" data-edge="n"></i><i class="grip" data-edge="s"></i><i class="grip" data-edge="e"></i><i class="grip" data-edge="w"></i>
+    <i class="grip" data-edge="ne"></i><i class="grip" data-edge="nw"></i><i class="grip" data-edge="se"></i><i class="grip" data-edge="sw"></i>
+    </div>
     <div id="live" class="sr-only" aria-live="polite"></div>
     <script src="renderer.js"></script>
   </body>

@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld('ua', {
   controlUninstall: () => ipcRenderer.invoke('ua:control-uninstall'),
   controlSend: (id: string, command: unknown) => ipcRenderer.invoke('ua:control-send', id, command),
   launch: (request: unknown) => ipcRenderer.invoke('ua:launch', request),
+  winAction: (action: string) => ipcRenderer.send('ua:win', action),
+  winResize: (edge: string | null) => ipcRenderer.send('ua:win-resize', edge),
+  onWinState: (cb: (state: unknown) => void) => {
+    ipcRenderer.on('ua:win-state', (_e, state) => cb(state));
+  },
   onControl: (cb: (state: unknown) => void) => {
     ipcRenderer.on('ua:control', (_e, state) => cb(state));
   },

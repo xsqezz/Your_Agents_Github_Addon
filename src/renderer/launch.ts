@@ -6,7 +6,7 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 
 const MODE_LABEL: Record<LaunchMode, string> = { interactive: 'Normal', plan: 'Plan first', autopilot: 'Autopilot' };
 const ACCESS_LABEL: Record<LaunchAccess, string> = {
-  tools: 'Approve all tools, stay in the folder',
+  tools: 'Approve all tools (folder only)',
   full: 'Full access: any path and any URL',
 };
 
@@ -53,7 +53,9 @@ export function openLauncher(): void {
   if (dlg.open) return;
   $('launch-error').textContent = '';
   refresh();
-  dlg.showModal();
+  $('scrim').hidden = false;
+  // Not showModal(): a modal dialog would paint its backdrop outside the rounded window.
+  dlg.show();
   $<HTMLTextAreaElement>('launch-prompt').focus();
 }
 
@@ -73,8 +75,13 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
 
   $('launch-cancel').addEventListener('click', () => dlg.close());
   $('launch-enable').addEventListener('click', () => requestEnable());
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
+  $('scrim').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('close', () => ($('scrim').hidden = true));
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      dlg.close();
+    }
   });
 
   $<HTMLFormElement>('launch-form').addEventListener('submit', async (e) => {

@@ -22,6 +22,9 @@ declare global {
       controlUninstall(): Promise<ControlResult>;
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
+      winAction(action: 'minimize' | 'maximize' | 'close'): void;
+      winResize(edge: string | null): void;
+      onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;
       onControl(cb: (state: ControlState) => void): void;
     };
   }
@@ -462,7 +465,25 @@ function boot(): void {
     }
     if (t.closest('#overview')) scene.frameAll(true);
     if (t.closest('#new-agent')) openLauncher();
+    const winBtn = t.closest<HTMLElement>('[data-win]');
+    if (winBtn) window.ua.winAction(winBtn.dataset.win as 'minimize' | 'maximize' | 'close');
   });
+  window.ua.onWinState((s) => {
+    document.body.classList.toggle('maximized', s.maximized);
+    document.body.classList.toggle('fullscreen', s.fullscreen);
+    const label = s.maximized ? 'Restore' : 'Maximize';
+    $('win-max').setAttribute('aria-label', label);
+    $('win-max').title = label;
+  });
+  for (const grip of document.querySelectorAll<HTMLElement>('.grip')) {
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      grip.setPointerCapture(e.pointerId);
+      window.ua.winResize(grip.dataset.edge ?? null);
+    });
+    for (const end of ['pointerup', 'pointercancel', 'lostpointercapture']) grip.addEventListener(end, () => window.ua.winResize(null));
+  }
+  window.addEventListener('blur', () => window.ua.winResize(null));
   $('show-offline').addEventListener('change', (e) => {
     store.showOffline = (e.target as HTMLInputElement).checked;
     localStorage.setItem('ua.offline.v2', store.showOffline ? '1' : '0');

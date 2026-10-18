@@ -12,7 +12,7 @@ Build the installer and run it:
 npm run dist          # out/installer/ur-agents-Setup-<version>.exe
 ```
 
-The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_agents`, adds a **Desktop** shortcut and a Start Menu entry, and starts the app. Only one window runs at a time (starting it again just brings it forward). Uninstall from Windows Settings > Apps; that removes the shortcuts and the bridge extension from `~/.copilot/extensions`, and leaves your settings and audit log in `%LOCALAPPDATA%\ur-agents`. The installer is not code-signed, so Windows SmartScreen may ask you to confirm ("More info" > "Run anyway").
+The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_agents`, adds a **Desktop** shortcut and a Start Menu entry, and starts the app. The window is frameless with rounded corners and its own minimize / maximize / close buttons: drag the top bar to move it, drag any edge or corner to resize. Only one window runs at a time (starting it again just brings it forward). Uninstall from Windows Settings > Apps; that removes the shortcuts and the bridge extension from `~/.copilot/extensions`, and leaves your settings and audit log in `%LOCALAPPDATA%\ur-agents`. The installer is not code-signed, so Windows SmartScreen may ask you to confirm ("More info" > "Run anyway").
 
 ## Run from source
 
