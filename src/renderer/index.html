@@ -20,6 +20,7 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>ur-agents</span></div>
       <div id="counts" role="status" aria-label="Agent counts"></div>
       <div class="spacer"></div>
+      <label class="toggle" title="Let ur-agents send messages, stop agents and answer or approve requests"><input type="checkbox" id="control-toggle" /><span>Control</span></label>
       <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
       <button id="overview" type="button" class="btn">Overview</button>
       <div class="seg" role="group" aria-label="View">
@@ -40,6 +41,20 @@
         <ol id="timeline" class="timeline"></ol>
       </div>
       <div id="tab-info" class="tabpane" role="tabpanel" hidden></div>
+      <div id="composer" aria-label="Control this agent">
+        <div id="ctl-notice"></div>
+        <div id="pending"></div>
+        <form id="send-form" autocomplete="off">
+          <textarea id="msg" rows="2" maxlength="20000" placeholder="Message this agent…" aria-label="Message to the agent"></textarea>
+          <div class="send-row">
+            <label class="toggle small"><input type="checkbox" id="interrupt" /><span>Interrupt now</span></label>
+            <span class="spacer"></span>
+            <span id="ctl-status" role="status" aria-live="polite"></span>
+            <button type="button" id="stop-btn" class="btn small danger">Stop</button>
+            <button type="submit" id="send-btn" class="btn small primary">Send</button>
+          </div>
+        </form>
+      </div>
       <div class="panel-foot"><span id="src"></span></div>
     </aside>
 

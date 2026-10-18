@@ -78,6 +78,7 @@ interface DemoAgent {
   rev: number;
   items: TimelineItem[];
   lastSegment: number;
+  skew: number;
   running?: TimelineItem;
 }
 
@@ -101,7 +102,7 @@ export class DemoSource implements Source {
     this.onUpdate = onUpdate;
     const count = this.models.length;
     this.agents = Array.from({ length: count }, (_, index) => {
-      const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1 };
+      const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1, skew: 0 };
       this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index % TITLES.length]}.` });
       this.add(a, { kind: 'assistant', title: 'Agent', body: 'On it. I will start by reading the relevant code and running the tests.' });
       for (let h = 0; h < 4; h++) {
@@ -132,7 +133,26 @@ export class DemoSource implements Source {
   }
 
   private stepIndex(a: DemoAgent, now: number): number {
-    return Math.floor((now - this.startedAt) / SEGMENT_MS) + a.index;
+    return Math.floor((now - this.startedAt) / SEGMENT_MS) + a.index + a.skew;
+  }
+
+  summaries(): SessionSummary[] {
+    return JSON.parse(this.lastJson || '[]') as SessionSummary[];
+  }
+
+  /** Simulated effect of a control command on a demo agent. */
+  respond(id: string, what: 'send' | 'abort' | 'answer' | 'permission', text = ''): boolean {
+    const a = this.agents[Number(id.replace('demo-', ''))];
+    if (!a) return false;
+    if (what === 'send' || what === 'answer') this.add(a, { kind: 'user', title: what === 'send' ? 'Prompt' : 'Answer', body: text });
+    if (what === 'permission') this.add(a, { kind: 'system', title: `Permission ${text}`, status: text === 'approve' ? 'ok' : 'fail' });
+    if (what === 'abort') this.add(a, { kind: 'system', title: 'Stopped (user_initiated)', status: 'warn' });
+    if (what !== 'send') a.skew += 1;
+    if (what === 'send' || what === 'answer') {
+      setTimeout(() => this.add(a, { kind: 'assistant', title: 'Agent', body: `(demo) Got it: ${text.slice(0, 120)}` }), 1500);
+    }
+    this.tick();
+    return true;
   }
 
   private tick(): void {
@@ -156,7 +176,7 @@ export class DemoSource implements Source {
         else if (step.state === 'thinking') this.add(a, { kind: 'assistant', title: 'Agent', body: 'Let me think about the cleanest way to do this.' });
       }
       const model = this.models[a.index % this.models.length];
-      const segStart = this.startedAt + (seg - a.index) * SEGMENT_MS;
+      const segStart = this.startedAt + (seg - a.index - a.skew) * SEGMENT_MS;
       const subagents: SubAgentInfo[] = [];
       for (let s = 0; s < (step.subs ?? 0); s++) {
         const m = SUB_MODELS[(a.index + s) % SUB_MODELS.length];

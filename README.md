@@ -2,7 +2,7 @@
 
 A 3D hall for your GitHub Copilot agents. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with exactly ten fixed desks (two rows of five; the row by the window is turned round, so its agents face the room). With more than ten sessions, working agents get desks first and the rest are listed in the List view. Every agent session claims a desk: while the agent works, a small vinyl-toy robot sits at it and its pose shows what it is doing; when the agent is idle or offline the chair is tucked in, the laptop is closed and the lamp is off. Click an agent to read everything about it and watch its events stream in live.
 
-**Version 0.1 is read-only**: it only reads what the Copilot app and CLI already write under `~/.copilot`. Controlling agents (send a message, stop, answer, approve) is planned — see [docs/PLAN.md](docs/PLAN.md).
+**Version 0.2 can watch and control** the agents. It reads what the Copilot app and CLI already write under `~/.copilot`, and (once you install the bridge and switch **Control** on) sends messages, Stop, answers and permission decisions back. See [Controlling agents](#controlling-agents) and [docs/PLAN.md](docs/PLAN.md).
 
 ## Run
 
@@ -21,7 +21,7 @@ npm run pack
 
 Other scripts: `npm test`, `npm run typecheck`.
 
-Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--copilot-home <dir>`, `--view list`, `--select <n>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
+Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
 
 ## What you see
 
@@ -49,12 +49,38 @@ A working agent sits with its back to you, facing its monitors. When it needs yo
 
 All figures share one body — a chunky vinyl-toy block with two glossy oval eyes, stubby side nubs and four short legs — and differ by colour and emblem (printed on the chest and on the back, so you can tell them apart while they face their screens): `claude-*` orange with a starburst, `gpt-*`/codex teal with a six-petal rosette, `gemini-*` rainbow gradient with a four-point sparkle, `grok-*` graphite with a slashed ring and "GROK", `mai-*` white with four coloured squares, anything else grey. The emblems are simple glyphs drawn in code, not the companies' official logos. The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
 
+## Controlling agents
+
+ur-agents can also **drive** your sessions, so the GitHub Copilot app can stay in the background:
+
+- **Message** an agent (Enter sends; “Interrupt now” sends it immediately instead of queueing it).
+- **Stop** the agent's current work.
+- **Answer** its questions (choices or free text) and **approve / reject** its permission requests — shown as cards above the message box, with the full command.
+
+How it works: a tiny extension (`bridge/`, no dependencies, no network except `127.0.0.1`) runs inside each Copilot CLI session, reports what the session is waiting for and executes the commands the app sends. It registers no tools or hooks and does not touch the session's own approval handling.
+
+Set it up once:
+
+1. Open an agent and press **Install bridge** (copies three files into `~/.copilot/extensions/ur-agents-bridge`; **Update bridge** after an upgrade).
+2. Turn on **Control** in the top bar and confirm. It is **off by default** and stays off until you switch it on.
+3. New sessions load the bridge automatically. A session that was already running needs its extensions reloaded (`/clear` in the CLI) or a restart; until then it stays watch-only and says so.
+
+Safety:
+
+- The app listens on `127.0.0.1` only, with a random token (stored in `%LOCALAPPDATA%\ur-agents\bridge.json`, per run), rejects browser origins and wrong hosts, and only accepts five validated command types.
+- Permission approvals are always an explicit click on a card that shows the exact command; there is no auto-approve.
+- Every command (what, which session, ok/failed) is appended to `%LOCALAPPDATA%\ur-agents\audit.jsonl`; message bodies are cut to 80 characters there.
+- If something else already answered a question or permission (for example in the Copilot app), the app tells you instead of acting twice.
+
+In `--demo` mode every synthetic agent reacts to commands (add `--control` to start with Control on), so you can try the whole flow safely.
+
 ## How it works
 
 ```
 src/core      parser + state machine (no I/O) — folds Copilot CLI events into an agent state
-src/main      Electron main: read-only data.db reader, events.jsonl tailer, demo source, IPC
-src/renderer  three.js office, procedural figures, detail panel, list view
+src/main      Electron main: read-only data.db reader, events.jsonl tailer, demo source, control server, IPC
+src/renderer  three.js office, procedural figures, detail panel with message box, list view
+bridge        the extension that runs inside each Copilot session (Control)
 test          node --test (runs the TypeScript directly)
 ```
 
@@ -66,4 +92,4 @@ Sources (all read-only):
 
 Secrets (GitHub tokens, JWTs, private keys, bearer tokens) are redacted before anything reaches the UI. The renderer has no Node access; it only receives normalised events over IPC.
 
-Limitations: the CLI does not persist token-by-token deltas, so "live" means per message / tool call. Event and database formats are internal to the Copilot app and may change between releases.
+Limitations: the CLI does not persist token-by-token deltas, so "live" means per message / tool call. Event and database formats are internal to the Copilot app and may change between releases. Control relies on the experimental session RPC of the Copilot SDK (`ui.handlePendingUserInput`, `permissions.handlePendingPermissionRequest`); if a future version removes it, the app reports that instead of failing silently. Reading stays read-only; only Control writes anything, and only through the SDK.

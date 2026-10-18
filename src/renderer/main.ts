@@ -1,5 +1,7 @@
 import { FAMILY_LABEL } from '../core/family.ts';
 import type { AgentState, SessionDetail, SessionSummary, TimelineItem } from '../core/types.ts';
+import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
+import { initControl, renderControl } from './control.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
 import { ago, duration, isOccupied, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
@@ -12,6 +14,12 @@ declare global {
       detail(id: string, since: number): Promise<SessionDetail | null>;
       onSummaries(cb: (list: SessionSummary[]) => void): void;
       onFocus(cb: (id: string) => void): void;
+      controlState(): Promise<ControlState>;
+      controlSetEnabled(on: boolean): Promise<void>;
+      controlInstall(): Promise<ControlResult>;
+      controlUninstall(): Promise<ControlResult>;
+      controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
+      onControl(cb: (state: ControlState) => void): void;
     };
   }
 }
@@ -217,6 +225,7 @@ function renderPanel(): void {
   $('tab-info').hidden = store.tab !== 'info';
   $('follow-btn').setAttribute('aria-pressed', String(store.follow));
   if (store.tab === 'info') renderInfo(s);
+  renderControl();
 }
 
 function kv(k: string, v: Child): HTMLElement[] {
@@ -335,6 +344,7 @@ function cycle(dir: number): void {
 
 function boot(): void {
   scene = new OfficeScene(stage, { onSelect: select });
+  initControl(selected);
 
   document.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, Notification } from 'electron';
 import type { AgentState, SessionSummary } from '../core/types.ts';
+import type { Controller } from '../core/control.ts';
+import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
+import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
 import type { Source } from './source.ts';
 
@@ -21,6 +24,7 @@ const ATTENTION: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error
 
 let win: BrowserWindow | null = null;
 let source: Source;
+let control: Controller;
 let latest: SessionSummary[] = [];
 let primed = false;
 const lastStates = new Map<string, AgentState>();
@@ -85,13 +89,31 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  source = demo ? new DemoSource(arg('agents')?.split(',').map((m) => m.trim()).filter(Boolean)) : new LiveSource(resolveHome(arg('copilot-home')));
+  const home = resolveHome(arg('copilot-home'));
+  const pushControl = (): void => {
+    win?.webContents.send('ua:control', control?.state());
+  };
+  if (demo) {
+    const ds = new DemoSource(arg('agents')?.split(',').map((m) => m.trim()).filter(Boolean));
+    source = ds;
+    control = new DemoControl(ds, pushControl);
+  } else {
+    source = new LiveSource(home);
+    control = new ControlServer({ copilotHome: home, bridgeSource: path.join(__dirname, 'bridge'), onChange: pushControl });
+  }
 
   ipcMain.handle('ua:info', () => source.info());
   ipcMain.handle('ua:list', () => latest);
   ipcMain.handle('ua:detail', (_e, id: string, since: number) => source.detail(String(id), Number(since) || 0));
+  ipcMain.handle('ua:control-state', () => control.state());
+  ipcMain.handle('ua:control-set-enabled', (_e, on: boolean) => control.setEnabled(on === true));
+  ipcMain.handle('ua:control-install', () => control.install());
+  ipcMain.handle('ua:control-uninstall', () => control.uninstall());
+  ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
 
   createWindow();
+  await control.start();
+  if (demo && has('control')) control.setEnabled(true);
   await source.start((list) => {
     latest = list;
     notifyAttention(list);
@@ -107,5 +129,6 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   source?.stop();
+  control?.stop();
   app.quit();
 });
