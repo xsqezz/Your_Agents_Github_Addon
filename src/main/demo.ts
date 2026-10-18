@@ -1,0 +1,230 @@
+import { familyOf, tierOf } from '../core/family.ts';
+import type { AgentState, FeedItem, FocusInfo, RoomInfo, SessionDetail, SessionSummary, Snapshot, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
+import type { Source, SourceInfo } from './source.ts';
+
+interface Step {
+  state: AgentState;
+  activity: string;
+  category?: ToolCategory;
+  tool?: string;
+  subs?: number;
+  pending?: { kind: string; text: string };
+}
+
+const SEQ: Step[] = [
+  { state: 'tool', category: 'shell', tool: 'powershell', activity: 'npm test -- --watch=false' },
+  { state: 'tool', category: 'read', tool: 'view', activity: 'src/billing/invoice.ts' },
+  { state: 'tool', category: 'write', tool: 'apply_patch', activity: 'patch src/billing/tax.ts' },
+  { state: 'tool', category: 'web', tool: 'web_search', activity: 'search the web: postgres 17 migration' },
+  { state: 'tool', category: 'task', tool: 'task', activity: 'Explorer: search “retry”', subs: 3 },
+  { state: 'thinking', activity: 'thinking…' },
+  { state: 'awaiting-input', activity: 'Which database should I target?', pending: { kind: 'question', text: 'Which database should I target?' } },
+  { state: 'awaiting-permission', activity: 'shell: git push --force', pending: { kind: 'shell', text: 'git push --force' } },
+  { state: 'compacting', activity: 'compacting context' },
+  { state: 'error', activity: 'Failed to get response from the AI model' },
+  { state: 'done', activity: 'task complete' },
+  { state: 'idle', activity: 'waiting for you' },
+  { state: 'offline', activity: 'not running' },
+  { state: 'stalled', activity: 'no activity and no live process' },
+];
+
+const MODELS = [
+  'claude-opus-5', 'gpt-6-astra', 'gemini-4-argon', 'grok-4.7', 'mai-code-1.1-flash', 'mystery-model-1', 'claude-sonnet-5.5',
+  'gpt-5.3-codex', 'gemini-3.8-flash', 'grok-4.5', 'claude-haiku-5.5', 'gpt-5.4-mini', 'claude-sonnet-5', 'gemini-3.7-flash',
+];
+
+const TITLES = [
+  'Refactor billing service', 'Migrate to Postgres 17', 'Write API v2 docs', 'Fix flaky checkout test', 'Add dark mode',
+  'Triage crash reports', 'Speed up CI pipeline', 'Port parser to Rust', 'Review auth PR', 'Clean up feature flags',
+  'Upgrade Electron', 'Localize onboarding', 'Audit dependencies', 'Prototype search UI',
+];
+
+/** The rooms of the Copilot app's Sessions sidebar, as a demo. */
+const DEMO_ROOM_NAMES = ['ur-agents', 'sqezz.best', 'Sqezist-App---Minecraft-Client-', 'koziolpawelpagepreview', 'axifek-community-bot', 'Delay-spawning-in-Minecraft', 'exosware-1.21.4-main', 'sqezz-client', '7liceumKlasa1A.online', 'sqezzbio', 'flexa.click', 'Copilot-Meter'];
+const DEMO_ROOMS: RoomInfo[] = [
+  ...DEMO_ROOM_NAMES.map((name, i): RoomInfo => ({ id: `demo-room-${i}`, name, kind: 'project', canLaunch: true })),
+  { id: 'chats', name: 'Chats', kind: 'chats', canLaunch: true },
+];
+/** Which room each demo agent sits in (index into DEMO_ROOMS). */
+const ROOM_OF = [0, 0, 0, 1, 1, 2, 2, 3, 5, 9, 12, 12, 10, 4];
+
+const SUB_NAMES = ['Explorer', 'Researcher', 'Builder'];
+const SUB_MODELS = ['gpt-6-astra', 'claude-sonnet-5', 'gemini-3.8-flash'];
+
+const FOCUS_TEXT: Record<string, string[]> = {
+  powershell: [
+    'npm test -- --watch=false', '', ' RUN  v2.1.8 /repo', ' ✓ src/billing/invoice.test.ts (12) 340ms', ' ✓ src/billing/discount.test.ts (8) 120ms',
+    ' ✕ src/billing/tax.test.ts > rounds half up', 'AssertionError: expected 10.5 to equal 10.51', ' ✓ src/api/orders.test.ts (21) 910ms',
+    ' ✓ src/api/customers.test.ts (17) 505ms', ' Tests  1 failed | 41 passed', ' Duration  2.31s',
+  ],
+  view: [
+    'src/billing/invoice.ts', '', 'import { tax } from "./tax";', '', 'export function total(items: Item[]) {', '  let sum = 0;',
+    '  for (const it of items) {', '    sum += it.price * it.qty;', '  }', '  return sum + tax(sum);', '}',
+  ],
+  apply_patch: [
+    'patch src/billing/tax.ts', '', '@@ export function tax(amount: number) {', '-  return Math.round(amount * 0.2);', '+  return roundHalfUp(amount * 0.2, 2);',
+    ' }', '', '+function roundHalfUp(n: number, d: number) {', '+  const f = 10 ** d;', '+  return Math.round((n + Number.EPSILON) * f) / f;', '+}',
+  ],
+  web_search: [
+    'search the web: postgres 17 migration', '', '1. PostgreSQL 17 release notes', '2. pg_upgrade --link: a field guide', '3. Zero-downtime upgrades with logical replication',
+    '4. What changed in VACUUM in 17', '5. Extension compatibility matrix',
+  ],
+};
+const THINKING = 'Let me think about the cleanest way to do this. I will pull the rounding into a helper, add a test for the half-up case and rerun the suite before touching anything else.';
+const HISTORY: [string, string, ToolCategory][] = [
+  ['view', 'src/app.ts', 'read'], ['rg', 'search “invoice”', 'read'], ['edit', 'src/billing/invoice.ts', 'write'],
+  ['powershell', 'npm run build', 'shell'], ['view', 'package.json', 'read'], ['apply_patch', 'patch src/api/orders.ts', 'write'],
+];
+
+function firstLine(text: string | undefined): string {
+  return ((text ?? '').split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 110);
+}
+
+const SEGMENT_MS = Number(process.env.UR_DEMO_SEGMENT_MS) || 7000;
+
+interface DemoAgent {
+  index: number;
+  rev: number;
+  items: TimelineItem[];
+  lastSegment: number;
+  skew: number;
+  running?: TimelineItem;
+}
+
+export class DemoSource implements Source {
+  private agents: DemoAgent[] = [];
+  private models: string[];
+  private timer: NodeJS.Timeout | null = null;
+  private lastJson = '';
+  private startedAt = Date.now();
+  private onUpdate: (snapshot: Snapshot) => void = () => {};
+
+  constructor(models?: string[]) {
+    this.models = models && models.length ? models : MODELS.slice(0, 10);
+  }
+
+  info(): SourceInfo {
+    return { mode: 'demo', home: 'synthetic demo data' };
+  }
+
+  async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
+    this.onUpdate = onUpdate;
+    const count = this.models.length;
+    this.agents = Array.from({ length: count }, (_, index) => {
+      const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1, skew: 0 };
+      this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index % TITLES.length]}.` });
+      this.add(a, { kind: 'assistant', title: 'Agent', body: 'On it. I will start by reading the relevant code and running the tests.' });
+      for (let h = 0; h < 4; h++) {
+        const [tool, body, category] = HISTORY[(index + h) % HISTORY.length];
+        this.add(a, { kind: 'tool', title: tool, body, status: 'ok', category, durationMs: 300 + h * 410 });
+      }
+      return a;
+    });
+    this.tick();
+    this.timer = setInterval(() => this.tick(), 700);
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  detail(id: string, since: number): SessionDetail | null {
+    const a = this.agents[Number(id.replace('demo-', ''))];
+    if (!a) return null;
+    return { id, rev: a.rev, items: since <= 0 ? a.items.slice() : a.items.filter((i) => i.rev > since), source: undefined };
+  }
+
+  private add(a: DemoAgent, item: Omit<TimelineItem, 'id' | 'rev' | 'ts'>): TimelineItem {
+    const it: TimelineItem = { ...item, id: `d${a.index}-${a.items.length}`, rev: ++a.rev, ts: Date.now() };
+    a.items.push(it);
+    return it;
+  }
+
+  private stepIndex(a: DemoAgent, now: number): number {
+    return Math.floor((now - this.startedAt) / SEGMENT_MS) + a.index + a.skew;
+  }
+
+  summaries(): SessionSummary[] {
+    return (JSON.parse(this.lastJson || '{"sessions":[]}') as Snapshot).sessions;
+  }
+
+  /** Simulated effect of a control command on a demo agent. */
+  respond(id: string, what: 'send' | 'abort' | 'answer' | 'permission', text = ''): boolean {
+    const a = this.agents[Number(id.replace('demo-', ''))];
+    if (!a) return false;
+    if (what === 'send' || what === 'answer') this.add(a, { kind: 'user', title: what === 'send' ? 'Prompt' : 'Answer', body: text });
+    if (what === 'permission') this.add(a, { kind: 'system', title: `Permission ${text}`, status: text === 'approve' ? 'ok' : 'fail' });
+    if (what === 'abort') this.add(a, { kind: 'system', title: 'Stopped (user_initiated)', status: 'warn' });
+    if (what !== 'send') a.skew += 1;
+    if (what === 'send' || what === 'answer') {
+      setTimeout(() => this.add(a, { kind: 'assistant', title: 'Agent', body: `(demo) Got it: ${text.slice(0, 120)}` }), 1500);
+    }
+    this.tick();
+    return true;
+  }
+
+  private tick(): void {
+    const now = Date.now();
+    const list: SessionSummary[] = [];
+    for (const a of this.agents) {
+      const seg = this.stepIndex(a, now);
+      const step = SEQ[seg % SEQ.length];
+      if (seg !== a.lastSegment) {
+        a.lastSegment = seg;
+        if (a.running) {
+          a.running.status = 'ok';
+          a.running.durationMs = SEGMENT_MS;
+          a.running.rev = ++a.rev;
+          a.running = undefined;
+        }
+        if (step.tool) a.running = this.add(a, { kind: 'tool', title: step.tool, body: step.activity, status: 'running', category: step.category });
+        else if (step.pending) this.add(a, { kind: 'permission', title: `Waiting: ${step.pending.kind}`, body: step.pending.text, status: 'pending' });
+        else if (step.state === 'error') this.add(a, { kind: 'system', title: 'Error', body: step.activity, status: 'fail' });
+        else if (step.state === 'done') this.add(a, { kind: 'system', title: 'Task complete', body: 'All checks pass.', status: 'ok' });
+        else if (step.state === 'thinking') this.add(a, { kind: 'assistant', title: 'Agent', body: 'Let me think about the cleanest way to do this.' });
+      }
+      const model = this.models[a.index % this.models.length];
+      const segStart = this.startedAt + (seg - a.index - a.skew) * SEGMENT_MS;
+      const subagents: SubAgentInfo[] = [];
+      for (let s = 0; s < (step.subs ?? 0); s++) {
+        const m = SUB_MODELS[(a.index + s) % SUB_MODELS.length];
+        subagents.push({
+          agentId: `demo-${a.index}-sub${s}`, name: 'explore', displayName: SUB_NAMES[s % SUB_NAMES.length], model: m,
+          family: familyOf(m), tier: tierOf(m), background: true, startedAt: segStart, status: 'running', currentTool: 'rg',
+        });
+      }
+      const live = step.state !== 'offline';
+      const reveal = 2 + Math.floor((now - segStart) / 520);
+      const fText = step.tool ? FOCUS_TEXT[step.tool] : undefined;
+      const focus: FocusInfo | undefined = fText
+        ? { kind: 'tool', category: step.category, status: 'running', title: step.tool!, text: fText.slice(0, reveal).join('\n'), ts: segStart }
+        : { kind: 'assistant', status: 'info', title: 'Agent', text: THINKING.slice(0, Math.max(10, Math.floor((now - segStart) / 38))), ts: segStart };
+      const feed: FeedItem[] = a.items.slice(-9).map((it) => ({
+        ts: it.ts, kind: it.kind, category: it.category, status: it.status, title: it.title, text: firstLine(it.body ?? it.title),
+      }));
+      list.push({
+        id: `demo-${a.index}`,
+        room: DEMO_ROOMS[ROOM_OF[a.index % ROOM_OF.length]].id,
+        title: TITLES[a.index % TITLES.length],
+        project: DEMO_ROOMS[ROOM_OF[a.index % ROOM_OF.length]].name,
+        branch: `feat/${TITLES[a.index % TITLES.length].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
+        model, family: familyOf(model), tier: tierOf(model),
+        mode: a.index % 3 === 0 ? 'autopilot' : 'interactive',
+        state: step.state, stateSince: segStart, activity: step.activity, category: step.category,
+        live, lastEventAt: now - 800,
+        contextPct: 0.12 + ((a.index * 0.071 + (seg % 5) * 0.02) % 0.8),
+        contextTokens: 20000 + a.index * 9000, contextLimit: 200000,
+        costAiu: 1.4 + a.index * 2.7, premiumRequests: a.index + 1,
+        toolCalls: 30 + a.index * 11, turns: 4 + a.index, hooks: 120 + a.index * 40,
+        subagents, pending: step.pending, feed, focus, hasEvents: true,
+      });
+    }
+    const snapshot: Snapshot = { rooms: DEMO_ROOMS, sessions: list };
+    const json = JSON.stringify(snapshot);
+    if (json !== this.lastJson) {
+      this.lastJson = json;
+      this.onUpdate(snapshot);
+    }
+  }
+}

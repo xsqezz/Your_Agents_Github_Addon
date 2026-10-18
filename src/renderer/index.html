@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ur-agents</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="stage" aria-hidden="false"></div>
+    <main id="list-view" hidden></main>
+
+    <div id="empty" hidden>
+      <h2>All desks are free</h2>
+      <p></p>
+    </div>
+
+    <header id="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>ur-agents</span></div>
+      <div id="counts" role="status" aria-label="Agent counts"></div>
+      <div class="spacer"></div>
+      <label class="toggle" title="Let ur-agents send messages, stop agents and answer or approve requests"><input type="checkbox" id="control-toggle" /><span>Control</span></label>
+      <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
+      <button id="new-agent" type="button" class="btn" title="Start a new agent in this room (N)">New agent</button>
+      <button id="overview" type="button" class="btn">Overview</button>
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" data-view="3d" aria-pressed="true">3D office</button>
+        <button type="button" data-view="list" aria-pressed="false">List</button>
+      </div>
+    </header>
+
+    <aside id="panel" hidden aria-label="Agent details">
+      <div id="panel-head"></div>
+      <div class="tabs" role="tablist" aria-label="Agent details">
+        <button type="button" role="tab" data-tab="live" aria-selected="true">Live</button>
+        <button type="button" role="tab" data-tab="info" aria-selected="false" tabindex="-1">Info</button>
+        <span class="spacer"></span>
+        <button type="button" id="follow-btn" class="btn small" aria-pressed="true">Follow</button>
+      </div>
+      <div id="tab-live" class="tabpane" role="tabpanel">
+        <ol id="timeline" class="timeline"></ol>
+      </div>
+      <div id="tab-info" class="tabpane" role="tabpanel" hidden></div>
+      <div id="composer" aria-label="Control this agent">
+        <div id="ctl-notice"></div>
+        <div id="pending"></div>
+        <form id="send-form" autocomplete="off">
+          <textarea id="msg" rows="2" maxlength="20000" placeholder="Message this agent…" aria-label="Message to the agent"></textarea>
+          <div class="send-row">
+            <label class="toggle small"><input type="checkbox" id="interrupt" /><span>Interrupt now</span></label>
+            <span class="spacer"></span>
+            <span id="ctl-status" role="status" aria-live="polite"></span>
+            <button type="button" id="stop-btn" class="btn small danger">Stop</button>
+            <button type="submit" id="send-btn" class="btn small primary">Send</button>
+          </div>
+        </form>
+      </div>
+      <div class="panel-foot"><span id="src"></span></div>
+    </aside>
+
+    <aside id="rooms" hidden aria-label="Rooms">
+      <div class="rooms-head"><span>Rooms</span><span id="rooms-count"></span></div>
+      <ul id="room-list"></ul>
+    </aside>
+
+    <footer id="statusbar"></footer>
+    <div id="toast" role="status" hidden></div>
+
+    <dialog id="launch" aria-labelledby="launch-title">
+      <form id="launch-form" autocomplete="off">
+        <header>
+          <h2 id="launch-title">New agent</h2>
+          <p>in <b id="launch-room"></b></p>
+        </header>
+        <div id="launch-notice" class="notice" hidden>
+          <p></p>
+          <button type="button" id="launch-enable" class="btn small primary">Turn on control</button>
+        </div>
+        <label class="field">
+          <span>What should it do?</span>
+          <textarea id="launch-prompt" rows="6" required placeholder="Describe the task, e.g. “Find why the build fails on Windows and fix it.”"></textarea>
+        </label>
+        <div class="grid">
+          <label class="field">
+            <span>Model</span>
+            <input id="launch-model" type="text" list="launch-models" placeholder="Default" spellcheck="false" />
+            <datalist id="launch-models"></datalist>
+          </label>
+          <label class="field">
+            <span>Reasoning effort</span>
+            <select id="launch-effort"></select>
+          </label>
+          <label class="field">
+            <span>Mode</span>
+            <select id="launch-mode"></select>
+          </label>
+          <label class="field">
+            <span>Permissions</span>
+            <select id="launch-access"></select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Name <i>(optional)</i></span>
+          <input id="launch-name" type="text" maxlength="80" placeholder="Shown in the Copilot app" />
+        </label>
+        <p class="hint">It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.</p>
+        <p id="launch-error" class="error" role="alert"></p>
+        <footer>
+          <button type="button" id="launch-cancel" class="btn">Cancel</button>
+          <button type="submit" id="launch-go" class="btn primary">Start agent <kbd>Ctrl+Enter</kbd></button>
+        </footer>
+      </form>
+    </dialog>
+    <div id="live" class="sr-only" aria-live="polite"></div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
