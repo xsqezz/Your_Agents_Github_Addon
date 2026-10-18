@@ -10,7 +10,7 @@ function concreteTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#cdc9c1';
+  g.fillStyle = '#c9c9c9';
   g.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 38; i++) {
     const x = Math.random() * 512;
@@ -48,18 +48,18 @@ function skyTexture(): THREE.CanvasTexture {
   c.height = H;
   const g = c.getContext('2d')!;
   const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#1b2a4a');
-  grad.addColorStop(0.35, '#5073a8');
-  grad.addColorStop(0.58, '#f1b98a');
-  grad.addColorStop(0.75, '#f7d3a2');
-  grad.addColorStop(1, '#f7d3a2');
+  grad.addColorStop(0, '#141414');
+  grad.addColorStop(0.35, '#4a4a4a');
+  grad.addColorStop(0.58, '#b4b4b4');
+  grad.addColorStop(0.75, '#e2e2e2');
+  grad.addColorStop(1, '#e2e2e2');
   g.fillStyle = grad;
   g.fillRect(0, 0, W, H);
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let layer = 0; layer < 2; layer++) {
     const base = H;
-    g.fillStyle = layer === 0 ? '#4a5268' : '#242a3a';
+    g.fillStyle = layer === 0 ? '#6a6a6a' : '#2a2a2a';
     let x = 0;
     while (x < W) {
       const bw = 30 + rnd() * 80;
@@ -69,12 +69,12 @@ function skyTexture(): THREE.CanvasTexture {
         for (let wy = base - bh + 8; wy < base - 4; wy += 12) {
           for (let wx = x + 6; wx < x + bw - 7; wx += 11) {
             if (rnd() < 0.3) {
-              g.fillStyle = rnd() < 0.8 ? '#ffd9a1' : '#bfe0ff';
+              g.fillStyle = rnd() < 0.8 ? '#f2f2f2' : '#bdbdbd';
               g.fillRect(wx, wy, 4, 6);
             }
           }
         }
-        g.fillStyle = '#242a3a';
+        g.fillStyle = '#2a2a2a';
       }
       x += bw + 2 + rnd() * 8;
     }
@@ -97,8 +97,8 @@ export class Hall {
     const zBack = -D / 2;
     const zFront = D / 2;
     const wallH = 6.4;
-    const frame = std(0x1e2329, 0.4, 0.55);
-    const white = std(0xf1efea, 0.8);
+    const frame = std(0x151515, 0.4, 0.55);
+    const white = std(0xf0f0f0, 0.8);
     const add = (mesh: THREE.Object3D, shadow = true): THREE.Object3D => {
       mesh.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -121,19 +121,19 @@ export class Hall {
     tex.needsUpdate = true;
     tex.repeat.set(W / 6, D / 6);
     const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.42, metalness: 0.02 });
-    const side = std(0x232830, 0.9);
+    const side = std(0x262626, 0.9);
     const slab = new THREE.Mesh(new THREE.BoxGeometry(W + 0.6, 0.5, D + 0.6), [side, side, top, side, side, side]);
     slab.position.y = -0.25;
     add(slab, false);
 
     // Brass inlays between desk rows.
-    const brass = std(0xc9a45c, 0.35, 0.7);
+    const brass = std(0xd9d9d9, 0.35, 0.7);
     for (let r = 0; r < rows - 1; r++) add(box(W - 0.6, 0.012, 0.07, brass, 0, 0.006, (r + 0.5 - (rows - 1) / 2) * SPACING_Z), false);
 
     // Closed room: plaster walls on all four sides, ceiling left open for the camera. Local frame of each
     // wall: runs along x, interior face at z = 0, body behind it (z < 0).
-    const plaster = std(0xf3f1ec, 0.9);
-    const oak = std(0xb98a59, 0.55);
+    const plaster = std(0xf4f4f4, 0.9);
+    const oak = std(0x8c8c8c, 0.55);
     const SILL = 1.0;
     const HEAD = 5.0;
     const MID = (SILL + HEAD) / 2;
@@ -157,7 +157,7 @@ export class Hall {
       const scene = new THREE.Mesh(new THREE.PlaneGeometry(glassLen, HEAD - SILL), new THREE.MeshBasicMaterial({ map: view, toneMapped: false }));
       scene.position.set(0, MID, -0.14);
       g.add(scene);
-      const glass = new THREE.Mesh(new THREE.PlaneGeometry(glassLen, HEAD - SILL), new THREE.MeshStandardMaterial({ color: 0xbcd4ee, transparent: true, opacity: 0.07, roughness: 0.05, metalness: 0.2, depthWrite: false }));
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(glassLen, HEAD - SILL), new THREE.MeshStandardMaterial({ color: 0xd8d8d8, transparent: true, opacity: 0.07, roughness: 0.05, metalness: 0.2, depthWrite: false }));
       glass.position.set(0, MID, -0.03);
       g.add(glass);
       return g;
@@ -177,7 +177,7 @@ export class Hall {
     place(parapet, 0, zFront, Math.PI);
 
     // Left wall: warm oak slats over a dark felt backing, with LED strips.
-    add(box(0.3, wallH, D, std(0x2a2521, 1), -W / 2 - 0.15, wallH / 2, 0), false);
+    add(box(0.3, wallH, D, std(0x1c1c1c, 1), -W / 2 - 0.15, wallH / 2, 0), false);
     const slatCount = Math.floor(D / 0.26);
     const slats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, wallH - 0.5, 0.15), oak, slatCount);
     const m4 = new THREE.Matrix4();
@@ -188,25 +188,25 @@ export class Hall {
     slats.castShadow = true;
     slats.receiveShadow = true;
     root.add(slats);
-    root.add(box(0.05, 0.05, D, basic(0xffe0b0), -W / 2 + 0.17, 0.95, 0));
-    root.add(box(0.05, 0.05, D, basic(0xffe0b0), -W / 2 + 0.17, wallH - 0.4, 0));
+    root.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, 0.95, 0));
+    root.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, wallH - 0.4, 0));
 
     // Low credenza along the oak wall.
     const credZ = zBack + 5.2;
     add(box(0.75, 0.78, 6.4, white, -W / 2 + 0.55, 0.39, credZ));
-    add(box(0.8, 0.05, 6.5, std(0x7a5736, 0.5), -W / 2 + 0.55, 0.805, credZ));
+    add(box(0.8, 0.05, 6.5, std(0x5a5a5a, 0.5), -W / 2 + 0.55, 0.805, credZ));
 
     // Lounge sofa on the glass side.
-    const sofa = std(0x3c4552, 0.85);
+    const sofa = std(0x3a3a3a, 0.85);
     add(box(1.05, 0.42, 3.3, sofa, W / 2 - 1.0, 0.21, 0));
     add(box(0.28, 0.62, 3.3, sofa, W / 2 - 0.58, 0.55, 0));
-    add(box(0.5, 0.26, 1.5, std(0xe9e6df, 0.5), W / 2 - 1.8, 0.13, 0));
-    add(box(0.4, 0.04, 1.3, std(0x7a5736, 0.5), W / 2 - 1.8, 0.28, 0));
+    add(box(0.5, 0.26, 1.5, std(0xeaeaea, 0.5), W / 2 - 1.8, 0.13, 0));
+    add(box(0.4, 0.04, 1.3, std(0x5a5a5a, 0.5), W / 2 - 1.8, 0.28, 0));
 
     // Plants.
     const plant = (x: number, z: number, s: number, y = 0): void => {
       const g = new THREE.Group();
-      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.32 * s, 0.26 * s, 0.55 * s, 18), std(0xe7e3dc, 0.6));
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.32 * s, 0.26 * s, 0.55 * s, 18), std(0xeeeeee, 0.6));
       pot.position.y = 0.275 * s;
       g.add(pot);
       const leaf = std(0x3f8f5a, 0.7);

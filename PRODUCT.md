@@ -14,7 +14,7 @@ A local, read-only "mission control" for the GitHub Copilot app, presented as a 
 
 ## Brand Personality
 
-Playful but exact. Chunky vinyl-toy figures and warm desk lamps in a dark night-shift office; all text, numbers and states stay crisp and readable. Charm lives in the figures, precision lives in the panels.
+Playful but exact. Chunky vinyl-toy figures in a strictly black-and-white world (interface, room and light are neutral greys); colour is reserved for the figures and for state (green working, yellow asking, red error, blue done); all text, numbers and states stay crisp and readable. Charm lives in the figures, precision lives in the panels.
 
 ## Anti-references
 

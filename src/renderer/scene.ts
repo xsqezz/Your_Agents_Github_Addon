@@ -10,7 +10,7 @@ import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, TOP_H, TOP_W } fr
 import { isOccupied, NEEDS_YOU, STATE_COLOR } from './theme.ts';
 
 const MINI_SPOTS: [number, number][] = [[-1.75, 0.55], [1.75, 0.55], [-1.35, 1.5]];
-const NEUTRAL = new THREE.Color(0xd2cec6);
+const NEUTRAL = new THREE.Color(0xcfcfcf);
 
 const stdMat = (color: number, rough = 0.7, metal = 0.05): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
 const box = (w: number, h: number, d: number, r: number, m: THREE.Material): THREE.Mesh => {
@@ -28,7 +28,7 @@ function numberTexture(n: number): THREE.CanvasTexture {
   c.width = 128;
   c.height = 64;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#8a857b';
+  g.fillStyle = '#8a8a8a';
   g.font = '600 44px "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
@@ -59,9 +59,9 @@ class Desk {
   private figure: Figure | null = null;
   private figureKey = '';
   private minis: { holder: THREE.Group; figure: Figure; key: string }[] = [];
-  private rugMat = stdMat(0xddd8cf, 0.9, 0);
-  private glowMat = new THREE.MeshBasicMaterial({ color: 0xd2cec6, toneMapped: false });
-  private shadeMat = new THREE.MeshBasicMaterial({ color: 0x3a3f47 });
+  private rugMat = stdMat(0xdcdcdc, 0.9, 0);
+  private glowMat = new THREE.MeshBasicMaterial({ color: 0xcfcfcf, toneMapped: false });
+  private shadeMat = new THREE.MeshBasicMaterial({ color: 0x3a3a3a });
   private color = new THREE.Color();
   private glow = new THREE.Color();
   private occ = 0;
@@ -94,8 +94,8 @@ class Desk {
     num.position.set(-1.6, 0.058, 1.68);
     g.add(num);
 
-    const oak = stdMat(0xcfae7c, 0.5, 0.02);
-    const steel = stdMat(0x22262b, 0.4, 0.6);
+    const oak = stdMat(0xd2d2d2, 0.5, 0.02);
+    const steel = stdMat(0x222222, 0.4, 0.6);
     const top = box(4.0, 0.07, 1.05, 0.03, oak);
     top.position.set(0, 0.78, -1.0);
     g.add(top);
@@ -108,7 +108,7 @@ class Desk {
     rail.position.set(0, 0.6, -1.4);
     g.add(rail);
 
-    const keyMat = stdMat(0x2a2f37, 0.5, 0.2);
+    const keyMat = stdMat(0x2a2a2a, 0.5, 0.2);
     const keyboard = box(1.1, 0.025, 0.3, 0.01, keyMat);
     keyboard.position.set(-0.1, 0.83, -0.66);
     const mouse = box(0.1, 0.03, 0.16, 0.04, keyMat);
@@ -116,7 +116,7 @@ class Desk {
     g.add(keyboard, mouse);
 
     // Ultrawide monitor below, a narrower 16:9 one centred above it with a soundbar in between (order in `monitors`: [top, main]).
-    const frameMat = stdMat(0x14171c, 0.45, 0.5);
+    const frameMat = stdMat(0x141414, 0.45, 0.5);
     const rig = new THREE.Group();
     rig.position.set(0, 0.95, -1.2);
     rig.rotation.x = -0.28;
@@ -126,7 +126,7 @@ class Desk {
     upper.group.position.y = 1.75 + 0.14 + 1.79 / 2;
     const bar = box(2.4, 0.09, 0.12, 0.03, frameMat);
     bar.position.set(0, 1.75 + 0.07, 0.0);
-    const barGlow = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.012, 0.01), new THREE.MeshBasicMaterial({ color: 0x35d6c4, toneMapped: false }));
+    const barGlow = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.012, 0.01), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
     barGlow.position.set(0, 1.75 + 0.07, 0.065);
     rig.add(main.group, upper.group, bar, barGlow);
     g.add(rig);
@@ -137,8 +137,8 @@ class Desk {
     foot.position.set(0, 0.8325, -1.12);
     g.add(neck, foot);
 
-    const chairMat = stdMat(0x8791a0, 0.85, 0.02);
-    const chrome = stdMat(0xb8bec6, 0.25, 0.8);
+    const chairMat = stdMat(0x8a8a8a, 0.85, 0.02);
+    const chrome = stdMat(0xbdbdbd, 0.25, 0.8);
     const cbase = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.05, 20), chrome);
     cbase.position.y = 0.03;
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 10), chrome);
@@ -160,7 +160,7 @@ class Desk {
     shade.position.set(-2.12, 1.78, -0.1);
     g.add(lampBase, pole, shade);
 
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 14), stdMat(0xf4f2ee, 0.35));
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 14), stdMat(0xf4f4f4, 0.35));
     mug.position.set(1.75, 0.885, -0.7);
     mug.castShadow = true;
     g.add(mug);
@@ -203,7 +203,7 @@ class Desk {
       }
       if (!m) {
         const holder = new THREE.Group();
-        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.26, 14), stdMat(0x59636f, 0.85));
+        const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.26, 14), stdMat(0x5e5e5e, 0.85));
         stool.position.y = 0.13;
         stool.castShadow = true;
         const figure = new Figure(a.family, a.tier, 0.5, this.reduced);
@@ -265,7 +265,7 @@ class Desk {
     this.glowMat.color.copy(this.glow);
     this.rugMat.emissive.copy(this.color);
     this.rugMat.emissiveIntensity = s ? (this.hover || this.selected ? 0.12 : 0.03) : 0;
-    this.shadeMat.color.set(sitting ? 0xffd58a : 0x3a3f47);
+    this.shadeMat.color.set(sitting ? 0xffffff : 0x3a3a3a);
 
     this.drawScreens(sitting ? s : null, t);
 
@@ -276,8 +276,8 @@ class Desk {
   private drawScreens(s: SessionSummary | null, t: number): void {
     const [top, main] = this.monitors;
     if (!s) {
-      top.render(null, 'off', 0x2a2f36);
-      main.render(null, 'off', 0x2a2f36);
+      top.render(null, 'off', 0x2a2a2a);
+      main.render(null, 'off', 0x2a2a2a);
       return;
     }
     const phase = this.reduced ? 0 : Math.floor(t * 2.4);
@@ -335,14 +335,14 @@ export class OfficeScene {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.className = 'gl';
 
-    this.scene.background = new THREE.Color(0x0e1217);
+    this.scene.background = new THREE.Color(0x050505);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environmentIntensity = 0.55;
     pmrem.dispose();
 
-    this.scene.add(new THREE.HemisphereLight(0xe2ecff, 0xb9b3a8, 0.8));
-    this.key = new THREE.DirectionalLight(0xfff0dc, 2.4);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb4b4b4, 0.8));
+    this.key = new THREE.DirectionalLight(0xffffff, 2.4);
     this.key.position.set(-9, 20, 13);
     this.key.castShadow = true;
     this.key.shadow.mapSize.set(4096, 4096);

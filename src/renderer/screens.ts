@@ -11,8 +11,8 @@ export const TOP_H = 360;
 const MONO = '"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace';
 const UI = '"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
 const C = {
-  bg: '#0a1017', bar: '#131b26', text: '#dbe5f1', dim: '#7c8da3', faint: '#3a4759',
-  green: '#4be3a1', red: '#ff6b7d', amber: '#ffc247', blue: '#7db2ff', violet: '#b99bff', orange: '#ff9a4d',
+  bg: '#0a0a0a', bar: '#161616', text: '#f0f0f0', dim: '#8c8c8c', faint: '#444444',
+  green: '#4be3a1', red: '#ff6b7d', amber: '#ffc247', blue: '#ffffff', violet: '#b8b8b8', orange: '#d8d8d8',
 };
 const LH = 29;
 const PAD = 22;
@@ -86,7 +86,7 @@ function header(ctx: CanvasRenderingContext2D, title: string, right: string, col
 }
 
 export function drawOff(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#05070a';
+  ctx.fillStyle = '#050505';
   ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
 
@@ -192,7 +192,7 @@ export function drawFocus(ctx: CanvasRenderingContext2D, s: SessionSummary, phas
     header(ctx, 'Permission needed', s.pending.kind, C.amber, C.amber);
     ctx.font = `500 23px ${MONO}`;
     const lines = wrap(ctx, s.pending.text, maxW - 24).slice(0, 7);
-    ctx.fillStyle = '#16202c';
+    ctx.fillStyle = '#1b1b1b';
     ctx.fillRect(PAD, 66, maxW, lines.length * 32 + 24);
     ctx.fillStyle = C.text;
     ctx.textBaseline = 'middle';
@@ -212,7 +212,7 @@ export function drawFocus(ctx: CanvasRenderingContext2D, s: SessionSummary, phas
   }
   if (s.state === 'compacting') {
     header(ctx, 'Compacting context', stateText(s), C.violet, C.violet);
-    ctx.fillStyle = '#16202c';
+    ctx.fillStyle = '#1b1b1b';
     ctx.fillRect(PAD, 170, maxW, 26);
     const w = ((phase * 0.37) % 1) * (maxW - 120);
     ctx.fillStyle = C.violet;
@@ -347,7 +347,7 @@ export class Monitor {
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.anisotropy = 4;
     this.screenMat = new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false });
-    this.led = new THREE.MeshBasicMaterial({ color: 0x2a2f36 });
+    this.led = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
 
     const frame = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.45, metalness: 0.5 });
     const bezel = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.07), frame);
