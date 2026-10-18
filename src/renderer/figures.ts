@@ -49,41 +49,7 @@ interface Target {
 
 const zero = (): Target => ({ x: 0, y: 0, rx: 0, ry: 0, rz: 0, sy: 1, sxz: 1, alx: 0, alz: 0, arx: 0, arz: 0, open: 1, wide: 1, dx: 0, dy: 0 });
 
-const textures = new Map<string, THREE.CanvasTexture>();
 const GREY = new THREE.Color(0x777b83);
-
-function bubbleTexture(text: string, bg = '#f4f7fb', fg = '#141a22'): THREE.CanvasTexture {
-  const key = `${text}|${bg}|${fg}`;
-  let tex = textures.get(key);
-  if (tex) return tex;
-  const c = document.createElement('canvas');
-  c.width = 160;
-  c.height = 128;
-  const g = c.getContext('2d')!;
-  g.fillStyle = bg;
-  g.beginPath();
-  g.roundRect(8, 8, 144, 90, 28);
-  g.fill();
-  g.beginPath();
-  g.moveTo(66, 96);
-  g.lineTo(80, 122);
-  g.lineTo(94, 96);
-  g.fill();
-  g.fillStyle = fg;
-  g.font = `700 ${text.length > 3 ? 40 : 52}px "Segoe UI Emoji","Segoe UI",system-ui,sans-serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(text, 80, 56);
-  tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  textures.set(key, tex);
-  return tex;
-}
-
-const BUBBLE: Partial<Record<Pose, string>> = {
-  sleep: 'Zzz', shell: '>_', read: '🔍', write: '✏️', web: '🌐', task: '👥', hand: '!', pack: '📦', error: '✖', done: '✔', stalled: '?',
-};
-const DOTS = ['.', '..', '...'];
 
 function mat(color: number, extra: Partial<THREE.MeshPhysicalMaterialParameters> = {}): THREE.MeshPhysicalMaterial {
   return new THREE.MeshPhysicalMaterial({ color, roughness: 0.42, metalness: 0.04, clearcoat: 0.35, clearcoatRoughness: 0.35, ...extra });
@@ -113,7 +79,6 @@ export class Figure {
   private props: Record<string, THREE.Object3D> = {};
   private smoke: THREE.Mesh[] = [];
   private boxes: THREE.Mesh[] = [];
-  private bubble: THREE.Sprite;
   private pose: Pose = 'sleep';
   private cur = zero();
   private phase = Math.random() * 20;
@@ -137,10 +102,6 @@ export class Figure {
     this.root.scale.setScalar(s);
     this.root.add(this.body);
 
-    this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture('Zzz'), transparent: true, depthWrite: false }));
-    this.bubble.scale.set(0.8, 0.64, 1);
-    this.bubble.position.set(0, this.look.h + 0.78, 0.2);
-    this.root.add(this.bubble);
   }
 
   setPose(p: Pose): void {
@@ -158,9 +119,6 @@ export class Figure {
     for (const s of this.smoke) s.visible = p === 'error';
     this.eyeX.visible = p === 'error';
     for (const e of this.eyeMeshes) e.visible = p !== 'error';
-    const label = p === 'think' ? undefined : BUBBLE[p];
-    this.bubble.visible = p !== 'think' ? !!label : true;
-    if (label) (this.bubble.material as THREE.SpriteMaterial).map = bubbleTexture(label);
   }
 
   update(t: number, dt: number): void {
@@ -184,7 +142,6 @@ export class Figure {
 
     this.animateProps(tt, dt);
     this.animateTint(tt, dt);
-    this.animateBubble(tt);
   }
 
   dispose(): void {
@@ -272,13 +229,6 @@ export class Figure {
     this.bodyMat.color.copy(this.baseColor).lerp(GREY, this.grey);
     this.bodyMat.emissive.set(0xff2438);
     this.bodyMat.emissiveIntensity = this.err * (0.25 + 0.25 * Math.sin(t * 12));
-  }
-
-  private animateBubble(t: number): void {
-    const b = this.bubble;
-    const base = this.look.h + 0.78;
-    b.position.y = base + Math.sin(t * 2.4) * 0.04 + (this.pose === 'hand' ? Math.abs(Math.sin(t * 3)) * 0.16 : 0);
-    if (this.pose === 'think') (b.material as THREE.SpriteMaterial).map = bubbleTexture(DOTS[Math.floor(t * 2.2) % 3]);
   }
 
   private build(): void {

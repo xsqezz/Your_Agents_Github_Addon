@@ -1,7 +1,12 @@
-import type { AgentState, RawEvent, SessionSummary, SubAgentInfo, TimelineItem, ToolCategory } from './types.ts';
+import type { AgentState, FeedItem, FocusInfo, RawEvent, SessionSummary, SubAgentInfo, TimelineItem, ToolCategory } from './types.ts';
 import { familyOf, tierOf } from './family.ts';
 import { categoryOf, summarizePermission, summarizeTool } from './summarize.ts';
-import { safeText } from './redact.ts';
+import { safeText, truncate } from './redact.ts';
+
+function firstLine(text: string | undefined): string {
+  const line = (text ?? '').split('\n').find((l) => l.trim()) ?? '';
+  return line.trim().slice(0, 110);
+}
 
 const MAX_ITEMS = 500;
 const STALE_MS = 20 * 60_000;
@@ -44,6 +49,8 @@ export type TrackerSnapshot = Pick<
   | 'hooks'
   | 'subagents'
   | 'pending'
+  | 'feed'
+  | 'focus'
 >;
 
 function first<T>(it: Iterable<T>): T | undefined {
@@ -282,7 +289,34 @@ export class SessionTracker {
       hooks: this.hooks,
       subagents: subs.slice(-12),
       pending,
+      feed: this.feed(),
+      focus: this.focus(),
     };
+  }
+
+  private feed(): FeedItem[] {
+    return this.items.slice(-9).map((it) => ({
+      ts: it.ts,
+      kind: it.kind,
+      category: it.category,
+      status: it.status,
+      title: it.title,
+      text: firstLine(it.kind === 'tool' ? it.body : (it.body ?? it.title)),
+    }));
+  }
+
+  private focus(): FocusInfo | undefined {
+    let pick: TimelineItem | undefined;
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if (it.kind === 'tool' && it.status === 'running') {
+        pick = it;
+        break;
+      }
+      if (!pick && (it.kind === 'tool' || it.kind === 'assistant' || it.kind === 'subagent')) pick = it;
+    }
+    if (!pick) return undefined;
+    return { kind: pick.kind, category: pick.category, status: pick.status, title: pick.title, text: truncate(pick.body ?? '', 1100), ts: pick.ts };
   }
 
   itemsSince(rev: number): TimelineItem[] {

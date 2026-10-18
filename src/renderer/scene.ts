@@ -7,12 +7,11 @@ import type { SessionSummary } from '../core/types.ts';
 import { Figure, poseFor } from './figures.ts';
 import { Hall } from './hall.ts';
 import { capacityFor, COLS, deskPos, hallSize, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
+import { drawActivity, drawFocus, Monitor } from './screens.ts';
 import { isOccupied, NEEDS_YOU, STATE_COLOR, STATE_LABEL, stateText } from './theme.ts';
 
-const MINI_SPOTS: [number, number][] = [[-1.65, 0.15], [1.65, 0.15], [-1.25, -1.25]];
+const MINI_SPOTS: [number, number][] = [[-1.75, 0.55], [1.75, 0.55], [-1.35, 1.5]];
 const NEUTRAL = new THREE.Color(0xd2cec6);
-const LID_OPEN = 0.28;
-const LID_CLOSED = -1.5;
 
 const stdMat = (color: number, rough = 0.7, metal = 0.05): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
 const box = (w: number, h: number, d: number, r: number, m: THREE.Material): THREE.Mesh => {
@@ -58,19 +57,19 @@ class Desk {
   private reduced: boolean;
   private chair = new THREE.Group();
   private holder = new THREE.Group();
-  private hinge = new THREE.Group();
+  private monitors: Monitor[] = [];
+  private screenSig = '';
+  private swivel = Math.PI;
   private figure: Figure | null = null;
   private figureKey = '';
   private minis: { holder: THREE.Group; figure: Figure; key: string }[] = [];
   private rugMat = stdMat(0xddd8cf, 0.9, 0);
   private glowMat = new THREE.MeshBasicMaterial({ color: 0xd2cec6 });
-  private ledMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
   private shadeMat = new THREE.MeshBasicMaterial({ color: 0x3a3f47 });
   private color = new THREE.Color();
   private glow = new THREE.Color();
   private occ = 0;
   private tuck = 1;
-  private lid = LID_CLOSED;
   private el: Tag;
   private cache = new Map<string, string>();
 
@@ -91,13 +90,12 @@ class Desk {
     this.el = { btn: q('.tag'), name: q('.tag-name'), state: q('.tag-state b'), dot: q('.dot'), act: q('.tag-act'), ctx: q('.ctx i'), sub: q('.tag-sub') };
     this.label = new CSS2DObject(wrap);
     this.label.center.set(0.5, 1);
-    this.label.position.set(0, 3.15, 0.3);
+    this.label.position.set(0, 2.95, -0.6);
     this.label.visible = false;
     this.group.add(this.label);
     this.holder.visible = false;
     this.holder.scale.setScalar(0.001);
-    this.hinge.rotation.x = LID_CLOSED;
-    this.chair.position.z = 0.5;
+    this.chair.position.z = -0.45;
   }
 
   private build(): void {
@@ -119,30 +117,32 @@ class Desk {
 
     const oak = stdMat(0xcfae7c, 0.5, 0.02);
     const steel = stdMat(0x22262b, 0.4, 0.6);
-    const top = box(2.5, 0.07, 1.05, 0.03, oak);
-    top.position.set(0, 0.78, 1.0);
+    const top = box(3.6, 0.07, 1.05, 0.03, oak);
+    top.position.set(0, 0.78, -1.0);
     g.add(top);
-    for (const x of [-1.15, 1.15]) {
+    for (const x of [-1.7, 1.7]) {
       const leg = box(0.07, 0.75, 0.9, 0.02, steel);
-      leg.position.set(x, 0.375, 1.0);
+      leg.position.set(x, 0.375, -1.0);
       g.add(leg);
     }
-    const rail = box(2.3, 0.05, 0.05, 0.015, steel);
-    rail.position.set(0, 0.6, 1.4);
+    const rail = box(3.3, 0.05, 0.05, 0.015, steel);
+    rail.position.set(0, 0.6, -1.4);
     g.add(rail);
 
-    const silver = stdMat(0xbfc5cd, 0.3, 0.7);
-    const base = box(0.9, 0.03, 0.6, 0.015, silver);
-    base.position.set(0, 0.835, 1.0);
-    g.add(base);
-    this.hinge.position.set(0, 0.85, 1.3);
-    const lid = box(0.9, 0.32, 0.03, 0.02, silver);
-    lid.position.y = 0.16;
-    const led = new THREE.Mesh(new THREE.CircleGeometry(0.05, 16), this.ledMat);
-    led.position.set(0, 0, 0.02);
-    lid.add(led);
-    this.hinge.add(lid);
-    g.add(this.hinge);
+    const keyMat = stdMat(0x2a2f37, 0.5, 0.2);
+    const keyboard = box(0.95, 0.025, 0.3, 0.01, keyMat);
+    keyboard.position.set(-0.1, 0.83, -0.68);
+    const mouse = box(0.1, 0.03, 0.16, 0.04, keyMat);
+    mouse.position.set(0.7, 0.83, -0.68);
+    g.add(keyboard, mouse);
+
+    // Two large monitors that face the room (and the camera); the agent works with its back to us.
+    for (const side of [-1, 1] as const) {
+      const m = new Monitor(side);
+      m.group.position.set(side * 0.99, 0.815, -1.2);
+      g.add(m.group);
+      this.monitors.push(m);
+    }
 
     const chairMat = stdMat(0x8791a0, 0.85, 0.02);
     const chrome = stdMat(0xb8bec6, 0.25, 0.8);
@@ -152,24 +152,23 @@ class Desk {
     stem.position.y = 0.31;
     const seat = box(0.98, 0.12, 0.98, 0.05, chairMat);
     seat.position.set(0, 0.6, -0.05);
-    const back = box(0.98, 0.62, 0.1, 0.05, chairMat);
-    back.position.set(0, 0.97, -0.55);
+    const back = box(0.98, 0.42, 0.1, 0.05, chairMat);
+    back.position.set(0, 0.9, -0.55);
     for (const m of [cbase, stem]) m.castShadow = true;
     this.holder.position.set(0, 0.68, -0.05);
     this.chair.add(cbase, stem, seat, back, this.holder);
     g.add(this.chair);
 
-    const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.03, 14), steel);
-    lampBase.position.set(-0.95, 0.835, 0.85);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.5, 8), steel);
-    pole.position.set(-0.95, 1.08, 0.85);
-    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.2, 14), this.shadeMat);
-    shade.position.set(-0.86, 1.34, 0.85);
-    shade.rotation.z = -0.5;
+    const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.04, 16), steel);
+    lampBase.position.set(-1.78, 0.02, -0.2);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), steel);
+    pole.position.set(-1.78, 0.87, -0.2);
+    const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.26, 16), this.shadeMat);
+    shade.position.set(-1.78, 1.78, -0.2);
     g.add(lampBase, pole, shade);
 
     const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 14), stdMat(0xf4f2ee, 0.35));
-    mug.position.set(0.9, 0.885, 1.15);
+    mug.position.set(1.5, 0.885, -0.7);
     mug.castShadow = true;
     g.add(mug);
 
@@ -239,7 +238,11 @@ class Desk {
     this.figure?.setPose(poseFor(s.state, s.category));
     this.syncMinis();
     this.color.set(STATE_COLOR[s.state]);
-    this.ledMat.color.copy(this.color);
+    this.screenSig = [
+      s.state, s.activity, s.model, s.subagents.map((a) => `${a.status}${a.currentTool ?? ''}`).join(','),
+      s.feed.map((f) => `${f.ts}${f.status ?? ''}${f.text.length}`).join(','),
+      `${s.focus?.ts}${s.focus?.status}${s.focus?.text.length}`,
+    ].join('|');
 
     const set = (key: string, el: HTMLElement, text: string) => {
       if (this.cache.get(key) === text) return;
@@ -268,16 +271,17 @@ class Desk {
   update(t: number, dt: number): void {
     const s = this.summary;
     const sitting = !!s && isOccupied(s.state);
+    const faceRoom = !!s && (NEEDS_YOU.includes(s.state) || s.state === 'done');
     const k = this.reduced ? 1 : 1 - Math.exp(-dt * 6);
     this.occ += ((sitting ? 1 : 0) - this.occ) * k;
     this.tuck += ((sitting ? 0 : 1) - this.tuck) * k * 0.8;
-    this.lid += ((sitting ? LID_OPEN : LID_CLOSED) - this.lid) * k;
+    // Working agents face their monitors (back to us); they swivel round when they need you.
+    this.swivel += ((faceRoom ? 0 : Math.PI) - this.swivel) * k * 0.7;
 
     this.holder.visible = this.occ > 0.03;
     this.holder.scale.setScalar(Math.max(0.001, this.occ));
-    this.chair.position.z = -0.1 + this.tuck * 0.6;
-    this.chair.rotation.y = this.tuck * 0.5;
-    this.hinge.rotation.x = this.lid;
+    this.chair.position.z = 0.1 - this.tuck * 0.55;
+    this.chair.rotation.y = this.swivel + this.tuck * 0.5;
 
     const attention = !!s && NEEDS_YOU.includes(s.state);
     let amt = !s ? 0 : s.state === 'offline' ? 0.12 : s.state === 'idle' ? 0.3 : s.state === 'stalled' ? 0.4 : 0.85;
@@ -288,16 +292,31 @@ class Desk {
     this.rugMat.emissive.copy(this.color);
     this.rugMat.emissiveIntensity = s ? (this.hover || this.selected ? 0.12 : 0.03) : 0;
     this.shadeMat.color.set(sitting ? 0xffd58a : 0x3a3f47);
-    if (!sitting) this.ledMat.color.set(0x000000);
-    else this.ledMat.color.copy(this.color);
+
+    this.drawScreens(sitting ? s : null, t);
 
     if (this.figure && this.holder.visible) this.figure.update(t, dt);
     for (const m of this.minis) m.figure.update(t, dt);
   }
 
+  private drawScreens(s: SessionSummary | null, t: number): void {
+    const [left, right] = this.monitors;
+    if (!s) {
+      left.render(null, 'off', 0x2a2f36);
+      right.render(null, 'off', 0x2a2f36);
+      return;
+    }
+    const phase = this.reduced ? 0 : Math.floor(t * 2.4);
+    const key = `${this.screenSig}|${phase}`;
+    const led = this.color.getHex();
+    left.render((ctx) => drawActivity(ctx, s, phase), key, led);
+    right.render((ctx) => drawFocus(ctx, s, phase, Date.now()), key, led);
+  }
+
   dispose(): void {
     this.figure?.dispose();
     for (const m of this.minis) m.figure.dispose();
+    for (const m of this.monitors) m.dispose();
     this.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose?.());
     this.label.element.remove();
   }
@@ -497,7 +516,7 @@ export class OfficeScene {
     if (idx === undefined) return;
     const p = this.desks[idx].group.position;
     this.userMoved = true;
-    this.go(new THREE.Vector3(p.x, p.y + 6.2, p.z + 7.4), new THREE.Vector3(p.x, p.y + 1.5, p.z - 0.2), true);
+    this.go(new THREE.Vector3(p.x, p.y + 5.9, p.z + 3.6), new THREE.Vector3(p.x, p.y + 1.5, p.z - 1.1), true);
   }
 
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {
@@ -538,7 +557,7 @@ export class OfficeScene {
     a.project(this.camera);
     b.project(this.camera);
     const px = Math.abs(b.x - a.x) * 0.5 * this.width;
-    const scale = Math.min(1.1, Math.max(0.5, px / 215));
+    const scale = Math.min(1.05, Math.max(0.5, px / 245));
     this.labels.domElement.style.setProperty('--tag-scale', scale.toFixed(3));
   }
 

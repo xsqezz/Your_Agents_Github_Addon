@@ -1,5 +1,5 @@
 import { familyOf, tierOf } from '../core/family.ts';
-import type { AgentState, SessionDetail, SessionSummary, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
+import type { AgentState, FeedItem, FocusInfo, SessionDetail, SessionSummary, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
 import type { Source, SourceInfo } from './source.ts';
 
 interface Step {
@@ -42,6 +42,35 @@ const TITLES = [
 const SUB_NAMES = ['Explorer', 'Researcher', 'Builder'];
 const SUB_MODELS = ['gpt-6-astra', 'claude-sonnet-5', 'gemini-3.8-flash'];
 
+const FOCUS_TEXT: Record<string, string[]> = {
+  powershell: [
+    'npm test -- --watch=false', '', ' RUN  v2.1.8 /repo', ' ✓ src/billing/invoice.test.ts (12) 340ms', ' ✓ src/billing/discount.test.ts (8) 120ms',
+    ' ✕ src/billing/tax.test.ts > rounds half up', 'AssertionError: expected 10.5 to equal 10.51', ' ✓ src/api/orders.test.ts (21) 910ms',
+    ' ✓ src/api/customers.test.ts (17) 505ms', ' Tests  1 failed | 41 passed', ' Duration  2.31s',
+  ],
+  view: [
+    'src/billing/invoice.ts', '', 'import { tax } from "./tax";', '', 'export function total(items: Item[]) {', '  let sum = 0;',
+    '  for (const it of items) {', '    sum += it.price * it.qty;', '  }', '  return sum + tax(sum);', '}',
+  ],
+  apply_patch: [
+    'patch src/billing/tax.ts', '', '@@ export function tax(amount: number) {', '-  return Math.round(amount * 0.2);', '+  return roundHalfUp(amount * 0.2, 2);',
+    ' }', '', '+function roundHalfUp(n: number, d: number) {', '+  const f = 10 ** d;', '+  return Math.round((n + Number.EPSILON) * f) / f;', '+}',
+  ],
+  web_search: [
+    'search the web: postgres 17 migration', '', '1. PostgreSQL 17 release notes', '2. pg_upgrade --link: a field guide', '3. Zero-downtime upgrades with logical replication',
+    '4. What changed in VACUUM in 17', '5. Extension compatibility matrix',
+  ],
+};
+const THINKING = 'Let me think about the cleanest way to do this. I will pull the rounding into a helper, add a test for the half-up case and rerun the suite before touching anything else.';
+const HISTORY: [string, string, ToolCategory][] = [
+  ['view', 'src/app.ts', 'read'], ['rg', 'search “invoice”', 'read'], ['edit', 'src/billing/invoice.ts', 'write'],
+  ['powershell', 'npm run build', 'shell'], ['view', 'package.json', 'read'], ['apply_patch', 'patch src/api/orders.ts', 'write'],
+];
+
+function firstLine(text: string | undefined): string {
+  return ((text ?? '').split('\n').find((l) => l.trim()) ?? '').trim().slice(0, 110);
+}
+
 const SEGMENT_MS = Number(process.env.UR_DEMO_SEGMENT_MS) || 7000;
 
 interface DemoAgent {
@@ -75,6 +104,10 @@ export class DemoSource implements Source {
       const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1 };
       this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index % TITLES.length]}.` });
       this.add(a, { kind: 'assistant', title: 'Agent', body: 'On it. I will start by reading the relevant code and running the tests.' });
+      for (let h = 0; h < 4; h++) {
+        const [tool, body, category] = HISTORY[(index + h) % HISTORY.length];
+        this.add(a, { kind: 'tool', title: tool, body, status: 'ok', category, durationMs: 300 + h * 410 });
+      }
       return a;
     });
     this.tick();
@@ -133,6 +166,14 @@ export class DemoSource implements Source {
         });
       }
       const live = step.state !== 'offline';
+      const reveal = 2 + Math.floor((now - segStart) / 520);
+      const fText = step.tool ? FOCUS_TEXT[step.tool] : undefined;
+      const focus: FocusInfo | undefined = fText
+        ? { kind: 'tool', category: step.category, status: 'running', title: step.tool!, text: fText.slice(0, reveal).join('\n'), ts: segStart }
+        : { kind: 'assistant', status: 'info', title: 'Agent', text: THINKING.slice(0, Math.max(10, Math.floor((now - segStart) / 38))), ts: segStart };
+      const feed: FeedItem[] = a.items.slice(-9).map((it) => ({
+        ts: it.ts, kind: it.kind, category: it.category, status: it.status, title: it.title, text: firstLine(it.body ?? it.title),
+      }));
       list.push({
         id: `demo-${a.index}`,
         title: TITLES[a.index % TITLES.length],
@@ -146,7 +187,7 @@ export class DemoSource implements Source {
         contextTokens: 20000 + a.index * 9000, contextLimit: 200000,
         costAiu: 1.4 + a.index * 2.7, premiumRequests: a.index + 1,
         toolCalls: 30 + a.index * 11, turns: 4 + a.index, hooks: 120 + a.index * 40,
-        subagents, pending: step.pending, hasEvents: true,
+        subagents, pending: step.pending, feed, focus, hasEvents: true,
       });
     }
     const json = JSON.stringify(list);

@@ -122,6 +122,22 @@ test('shutdown without a live process is offline; error shows when nothing else 
   assert.equal(t.snapshot(T0 + 2000, { live: false, running: false }).state, 'offline');
 });
 
+test('screens: feed and focus follow the running tool', () => {
+  const t = new SessionTracker('s8');
+  t.ingest(ev('user.message', { content: 'do it' }));
+  t.ingest(ev('assistant.turn_start', { turnId: 'a' }));
+  t.ingest(ev('tool.execution_start', { toolCallId: 'c1', toolName: 'powershell', arguments: { command: 'npm test' } }));
+  let s = t.snapshot(T0 + 60_000, live);
+  assert.equal(s.focus?.title, 'powershell');
+  assert.equal(s.focus?.status, 'running');
+  assert.equal(s.feed.at(-1)?.text, 'npm test');
+  t.ingest(ev('tool.execution_complete', { toolCallId: 'c1', success: true, result: { content: 'all green' } }));
+  s = t.snapshot(T0 + 61_000, live);
+  assert.equal(s.focus?.status, 'ok');
+  assert.match(s.focus?.text ?? '', /all green/);
+  assert.ok(s.feed.length <= 9);
+});
+
 test('incremental timeline by revision', () => {
   const t = new SessionTracker('s7');
   t.ingest(ev('user.message', { content: 'one' }));

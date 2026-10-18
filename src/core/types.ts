@@ -52,6 +52,25 @@ export interface SubAgentInfo {
   currentTool?: string;
 }
 
+export interface FeedItem {
+  ts: number;
+  kind: TimelineItem['kind'];
+  category?: ToolCategory;
+  status?: TimelineItem['status'];
+  title: string;
+  text: string;
+}
+
+/** What the agent is looking at right now: the running tool, or its latest output. */
+export interface FocusInfo {
+  kind: TimelineItem['kind'];
+  category?: ToolCategory;
+  status?: TimelineItem['status'];
+  title: string;
+  text: string;
+  ts: number;
+}
+
 export interface SessionSummary {
   id: string;
   title: string;
@@ -77,6 +96,8 @@ export interface SessionSummary {
   hooks: number;
   subagents: SubAgentInfo[];
   pending?: { kind: string; text: string };
+  feed: FeedItem[];
+  focus?: FocusInfo;
   hasEvents: boolean;
 }
 
