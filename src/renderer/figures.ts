@@ -35,6 +35,7 @@ export const LOOKS: Record<Family, Look> = {
   gemini: { color: 0xffffff, limb: 0xffffff, gradient: true },
   grok: { color: 0x31353d, limb: 0x2b2f36 },
   mai: { color: 0xe9e8e4, limb: 0xe0dfdb },
+  auto: { color: 0x4a4b52, limb: 0x42434a },
   generic: { color: 0x8e98a6, limb: 0x7f8998 },
 };
 
@@ -117,6 +118,16 @@ function emblemTexture(family: Family): THREE.CanvasTexture {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('GROK', 128, 212);
+  } else if (family === 'auto') {
+    // GitHub mark (Octicons "mark-github", MIT): a white disc with the cat cut out, so the body shows through.
+    g.translate(33, 33);
+    g.scale(11.9, 11.9);
+    g.fill(
+      new Path2D(
+        'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z',
+      ),
+      'evenodd',
+    );
   } else if (family === 'mai') {
     const squares: [number, number, string][] = [[34, 34, '#f25022'], [134, 34, '#7fba00'], [34, 134, '#00a4ef'], [134, 134, '#ffb900']];
     for (const [x, y, col] of squares) {
@@ -404,7 +415,7 @@ export class Figure {
     // Raised emblem on the chest, and again on the back so the family shows when the agent faces its screens.
     const emblemMat = new THREE.MeshStandardMaterial({ map: emblemTexture(this.family), transparent: true, alphaTest: 0.35, roughness: 0.55, metalness: 0 });
     this.disposables.push(emblemMat);
-    const size = this.family === 'grok' ? 0.86 : 0.78;
+    const size = this.family === 'grok' || this.family === 'auto' ? 0.86 : 0.78;
     for (const dir of [1, -1]) {
       const emblem = new THREE.Mesh(new THREE.PlaneGeometry(size, size), emblemMat);
       emblem.position.set(0, L.h * 0.48, dir * (L.d / 2 + 0.006));

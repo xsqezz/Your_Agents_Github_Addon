@@ -1,4 +1,4 @@
-export type Family = 'claude' | 'gpt' | 'gemini' | 'grok' | 'mai' | 'generic';
+export type Family = 'claude' | 'gpt' | 'gemini' | 'grok' | 'mai' | 'auto' | 'generic';
 
 export type AgentState =
   | 'offline'

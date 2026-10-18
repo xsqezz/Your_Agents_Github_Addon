@@ -11,6 +11,7 @@ export const MAX_PROMPT = 8000;
 
 /** Suggestions only: the model field accepts any id the CLI knows. */
 export const MODEL_SUGGESTIONS = [
+  'auto',
   'claude-sonnet-5.5', 'claude-sonnet-5', 'claude-opus-5.5', 'claude-opus-5', 'claude-opus-4.8', 'claude-haiku-5.5', 'claude-haiku-4.5',
   'gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-luna', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5-mini',
   'gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.7-flash',

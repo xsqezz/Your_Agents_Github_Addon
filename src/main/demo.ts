@@ -29,7 +29,7 @@ const SEQ: Step[] = [
 ];
 
 const MODELS = [
-  'claude-opus-5', 'gpt-6-astra', 'gemini-4-argon', 'grok-4.7', 'mai-code-1.1-flash', 'mystery-model-1', 'claude-sonnet-5.5',
+  'claude-opus-5', 'gpt-6-astra', 'gemini-4-argon', 'grok-4.7', 'mai-code-1.1-flash', 'auto', 'mystery-model-1', 'claude-sonnet-5.5',
   'gpt-5.3-codex', 'gemini-3.8-flash', 'grok-4.5', 'claude-haiku-5.5', 'gpt-5.4-mini', 'claude-sonnet-5', 'gemini-3.7-flash',
 ];
 

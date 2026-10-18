@@ -3,6 +3,8 @@ import type { Family } from './types.ts';
 export function familyOf(model: string | undefined | null): Family {
   const m = (model ?? '').toLowerCase();
   if (!m) return 'generic';
+  // GitHub Copilot's automatic model selection is stored as the model "auto".
+  if (m === 'auto' || m.startsWith('auto ') || m.startsWith('auto:') || m.startsWith('auto-')) return 'auto';
   if (m.includes('claude')) return 'claude';
   if (m.includes('codex') || m.startsWith('gpt') || /^o\d/.test(m) || m.includes('openai')) return 'gpt';
   if (m.includes('gemini')) return 'gemini';
@@ -25,5 +27,6 @@ export const FAMILY_LABEL: Record<Family, string> = {
   gemini: 'Gemini',
   grok: 'Grok',
   mai: 'MAI',
+  auto: 'Copilot Auto',
   generic: 'Model',
 };
