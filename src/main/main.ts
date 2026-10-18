@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, Notification } from 'electron';
 import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
@@ -22,6 +23,52 @@ const shotDelay = Number(arg('delay')) || 4500;
 const dumpFile = arg('dump');
 
 const ATTENTION: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error'];
+
+/** Squirrel runs the app with --squirrel-* while installing, updating and uninstalling. Shortcuts are the app's job; then it exits at once. */
+function handleSquirrel(): boolean {
+  const cmd = process.argv[1];
+  if (process.platform !== 'win32' || !cmd?.startsWith('--squirrel-')) return false;
+  const exe = path.basename(process.execPath);
+  const updater = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
+  const run = (args: string[]): void => {
+    try {
+      spawn(updater, args, { detached: true, stdio: 'ignore' }).unref();
+    } catch {
+      /* shortcuts are a convenience */
+    }
+  };
+  if (cmd === '--squirrel-install' || cmd === '--squirrel-updated') run([`--createShortcut=${exe}`]);
+  else if (cmd === '--squirrel-uninstall') {
+    run([`--removeShortcut=${exe}`]);
+    // The bridge is useless without the app, so it goes too. Settings and the audit log stay.
+    fs.rmSync(path.join(resolveHome(), 'extensions', 'ur-agents-bridge'), { recursive: true, force: true });
+    // Squirrel leaves its (then empty) Start Menu folder behind.
+    const folder = path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'ur-agents');
+    setTimeout(() => {
+      try {
+        fs.rmdirSync(folder);
+      } catch {
+        /* not empty or already gone */
+      }
+      app.quit();
+    }, 2500);
+    return true;
+  }
+  setTimeout(() => app.quit(), 1000);
+  return true;
+}
+
+const squirrel = handleSquirrel();
+const solo = !squirrel && !demo && !shotFile && !dumpFile;
+const gotLock = !solo || app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+else if (solo) {
+  app.on('second-instance', () => {
+    if (win?.isMinimized()) win.restore();
+    win?.show();
+    win?.focus();
+  });
+}
 
 let win: BrowserWindow | null = null;
 let source: Source;
@@ -94,6 +141,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (!gotLock || squirrel) return;
   const home = resolveHome(arg('copilot-home'));
   const pushControl = (): void => {
     win?.webContents.send('ua:control', control?.state());
