@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ur-agents</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="stage" aria-hidden="false"></div>
+    <main id="list-view" hidden></main>
+
+    <div id="empty" hidden>
+      <h2>No agents in sight</h2>
+      <p></p>
+    </div>
+
+    <header id="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>ur-agents</span></div>
+      <div id="counts" role="status" aria-label="Agent counts"></div>
+      <div class="spacer"></div>
+      <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
+      <button id="overview" type="button" class="btn">Overview</button>
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" data-view="3d" aria-pressed="true">3D office</button>
+        <button type="button" data-view="list" aria-pressed="false">List</button>
+      </div>
+    </header>
+
+    <aside id="panel" hidden aria-label="Agent details">
+      <div id="panel-head"></div>
+      <div class="tabs" role="tablist" aria-label="Agent details">
+        <button type="button" role="tab" data-tab="live" aria-selected="true">Live</button>
+        <button type="button" role="tab" data-tab="info" aria-selected="false" tabindex="-1">Info</button>
+        <span class="spacer"></span>
+        <button type="button" id="follow-btn" class="btn small" aria-pressed="true">Follow</button>
+      </div>
+      <div id="tab-live" class="tabpane" role="tabpanel">
+        <ol id="timeline" class="timeline"></ol>
+      </div>
+      <div id="tab-info" class="tabpane" role="tabpanel" hidden></div>
+      <div class="panel-foot"><span id="src"></span></div>
+    </aside>
+
+    <footer id="statusbar"></footer>
+    <div id="live" class="sr-only" aria-live="polite"></div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
