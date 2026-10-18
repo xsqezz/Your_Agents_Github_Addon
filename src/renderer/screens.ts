@@ -343,21 +343,21 @@ export class Monitor {
     this.led = new THREE.MeshBasicMaterial({ color: 0x2a2f36 });
 
     const frame = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.45, metalness: 0.5 });
-    const W = 1.55;
-    const H = 0.98;
+    const W = 1.92;
+    const H = 1.2;
     const bezel = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.06), frame);
     bezel.castShadow = true;
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.1, (W - 0.1) * (SCREEN_H / SCREEN_W)), this.screenMat);
     screen.position.z = 0.032;
-    const ledDot = new THREE.Mesh(new THREE.CircleGeometry(0.014, 10), this.led);
+    const ledDot = new THREE.Mesh(new THREE.CircleGeometry(0.016, 10), this.led);
     ledDot.position.set(W / 2 - 0.08, -H / 2 + 0.03, 0.033);
     const tilt = new THREE.Group();
     tilt.add(bezel, screen, ledDot);
-    tilt.position.y = 0.64;
+    tilt.position.y = 0.92;
     this.group.add(tilt);
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 0.05), frame);
-    neck.position.set(0, 0.16, -0.05);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.025, 0.34), frame);
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.05), frame);
+    neck.position.set(0, 0.21, -0.05);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.025, 0.38), frame);
     foot.position.set(0, 0.0125, 0.02);
     this.group.add(neck, foot);
     this.group.rotation.order = 'YXZ';

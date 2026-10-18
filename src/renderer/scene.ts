@@ -90,7 +90,7 @@ class Desk {
     this.el = { btn: q('.tag'), name: q('.tag-name'), state: q('.tag-state b'), dot: q('.dot'), act: q('.tag-act'), ctx: q('.ctx i'), sub: q('.tag-sub') };
     this.label = new CSS2DObject(wrap);
     this.label.center.set(0.5, 1);
-    this.label.position.set(0, 2.95, -0.6);
+    this.label.position.set(0, 3.45, -0.6);
     this.label.visible = false;
     this.group.add(this.label);
     this.holder.visible = false;
@@ -101,45 +101,45 @@ class Desk {
   private build(): void {
     const g = this.group;
 
-    const rug = box(3.9, 0.05, 3.9, 0.02, this.rugMat);
+    const rug = box(4.2, 0.05, 4.0, 0.02, this.rugMat);
     rug.position.y = 0.025;
     rug.castShadow = false;
     g.add(rug);
-    for (const [w, d, x, z] of [[3.9, 0.07, 0, 1.915], [3.9, 0.07, 0, -1.915], [0.07, 3.9, 1.915, 0], [0.07, 3.9, -1.915, 0]] as const) {
+    for (const [w, d, x, z] of [[4.2, 0.07, 0, 1.965], [4.2, 0.07, 0, -1.965], [0.07, 4.0, 2.065, 0], [0.07, 4.0, -2.065, 0]] as const) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), this.glowMat);
       bar.position.set(x, 0.055, z);
       g.add(bar);
     }
     const num = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.31), new THREE.MeshBasicMaterial({ map: numberTexture(this.index + 1), transparent: true }));
     num.rotation.x = -Math.PI / 2;
-    num.position.set(-1.45, 0.058, 1.62);
+    num.position.set(-1.6, 0.058, 1.68);
     g.add(num);
 
     const oak = stdMat(0xcfae7c, 0.5, 0.02);
     const steel = stdMat(0x22262b, 0.4, 0.6);
-    const top = box(3.6, 0.07, 1.05, 0.03, oak);
+    const top = box(4.0, 0.07, 1.05, 0.03, oak);
     top.position.set(0, 0.78, -1.0);
     g.add(top);
-    for (const x of [-1.7, 1.7]) {
+    for (const x of [-1.9, 1.9]) {
       const leg = box(0.07, 0.75, 0.9, 0.02, steel);
       leg.position.set(x, 0.375, -1.0);
       g.add(leg);
     }
-    const rail = box(3.3, 0.05, 0.05, 0.015, steel);
+    const rail = box(3.7, 0.05, 0.05, 0.015, steel);
     rail.position.set(0, 0.6, -1.4);
     g.add(rail);
 
     const keyMat = stdMat(0x2a2f37, 0.5, 0.2);
-    const keyboard = box(0.95, 0.025, 0.3, 0.01, keyMat);
-    keyboard.position.set(-0.1, 0.83, -0.68);
+    const keyboard = box(1.1, 0.025, 0.3, 0.01, keyMat);
+    keyboard.position.set(-0.1, 0.83, -0.66);
     const mouse = box(0.1, 0.03, 0.16, 0.04, keyMat);
-    mouse.position.set(0.7, 0.83, -0.68);
+    mouse.position.set(0.8, 0.83, -0.66);
     g.add(keyboard, mouse);
 
     // Two large monitors that face the room (and the camera); the agent works with its back to us.
     for (const side of [-1, 1] as const) {
       const m = new Monitor(side);
-      m.group.position.set(side * 0.99, 0.815, -1.2);
+      m.group.position.set(side * 1.0, 0.815, -1.2);
       g.add(m.group);
       this.monitors.push(m);
     }
@@ -160,19 +160,19 @@ class Desk {
     g.add(this.chair);
 
     const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.04, 16), steel);
-    lampBase.position.set(-1.78, 0.02, -0.2);
+    lampBase.position.set(-2.12, 0.02, -0.1);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), steel);
-    pole.position.set(-1.78, 0.87, -0.2);
+    pole.position.set(-2.12, 0.87, -0.1);
     const shade = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.26, 16), this.shadeMat);
-    shade.position.set(-1.78, 1.78, -0.2);
+    shade.position.set(-2.12, 1.78, -0.1);
     g.add(lampBase, pole, shade);
 
     const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.14, 14), stdMat(0xf4f2ee, 0.35));
-    mug.position.set(1.5, 0.885, -0.7);
+    mug.position.set(1.75, 0.885, -0.7);
     mug.castShadow = true;
     g.add(mug);
 
-    const pick = new THREE.Mesh(new THREE.BoxGeometry(3.9, 2.8, 3.9), new THREE.MeshBasicMaterial({ visible: false }));
+    const pick = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.0, 4.0), new THREE.MeshBasicMaterial({ visible: false }));
     pick.position.y = 1.4;
     pick.userData.deskIndex = this.index;
     g.add(pick);
@@ -516,7 +516,7 @@ export class OfficeScene {
     if (idx === undefined) return;
     const p = this.desks[idx].group.position;
     this.userMoved = true;
-    this.go(new THREE.Vector3(p.x, p.y + 5.9, p.z + 3.6), new THREE.Vector3(p.x, p.y + 1.5, p.z - 1.1), true);
+    this.go(new THREE.Vector3(p.x, p.y + 6.6, p.z + 4.6), new THREE.Vector3(p.x, p.y + 1.7, p.z - 1.1), true);
   }
 
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {

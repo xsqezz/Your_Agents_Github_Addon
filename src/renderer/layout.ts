@@ -1,6 +1,6 @@
 export const COLS = 5;
 export const MIN_DESKS = 10;
-export const SPACING_X = 4.5;
+export const SPACING_X = 4.9;
 export const SPACING_Z = 6.0;
 
 /** Desks always come in full rows of five, never fewer than ten. */
