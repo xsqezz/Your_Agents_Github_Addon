@@ -65,22 +65,24 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
 }
 
 function header(ctx: CanvasRenderingContext2D, title: string, right: string, color: string, rightColor = C.dim): void {
+  const W = ctx.canvas.width;
   ctx.fillStyle = C.bar;
-  ctx.fillRect(0, 0, ctx.canvas.width, 46);
+  ctx.fillRect(0, 0, W, 46);
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(PAD + 6, 23, 6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.font = `700 22px ${UI}`;
-  ctx.fillStyle = C.text;
   ctx.textBaseline = 'middle';
-  ctx.textAlign = 'left';
-  ctx.fillText(title, PAD + 22, 24);
   ctx.textAlign = 'right';
   ctx.font = `500 19px ${UI}`;
   ctx.fillStyle = rightColor;
-  ctx.fillText(fit(ctx, right, 330), ctx.canvas.width - PAD, 24);
+  const rightText = fit(ctx, right, W * 0.42);
+  ctx.fillText(rightText, W - PAD, 24);
+  const rightW = ctx.measureText(rightText).width;
   ctx.textAlign = 'left';
+  ctx.font = `700 22px ${UI}`;
+  ctx.fillStyle = C.text;
+  ctx.fillText(fit(ctx, title, W - PAD * 2 - 22 - rightW - 16), PAD + 22, 24);
 }
 
 export function drawOff(ctx: CanvasRenderingContext2D): void {
@@ -114,7 +116,7 @@ export function drawActivity(ctx: CanvasRenderingContext2D, s: SessionSummary, p
   const H = ctx.canvas.height;
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
-  header(ctx, 'Activity', `${FAMILY_LABEL[s.family]} · ${s.model || '?'}`, STATE_COLOR[s.state]);
+  header(ctx, s.title, `${FAMILY_LABEL[s.family]} · ${s.model || '?'}`, STATE_COLOR[s.state]);
   ctx.textBaseline = 'middle';
   const items = s.feed.slice(-Math.floor((H - 62) / LH));
   if (!items.length) {

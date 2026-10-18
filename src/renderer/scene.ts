@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { SessionSummary } from '../core/types.ts';
@@ -8,7 +7,7 @@ import { Figure, poseFor } from './figures.ts';
 import { Hall } from './hall.ts';
 import { capacityFor, COLS, deskPos, hallSize, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
 import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, TOP_H, TOP_W } from './screens.ts';
-import { isOccupied, NEEDS_YOU, STATE_COLOR, STATE_LABEL, stateText } from './theme.ts';
+import { isOccupied, NEEDS_YOU, STATE_COLOR } from './theme.ts';
 
 const MINI_SPOTS: [number, number][] = [[-1.75, 0.55], [1.75, 0.55], [-1.35, 1.5]];
 const NEUTRAL = new THREE.Color(0xd2cec6);
@@ -44,8 +43,6 @@ interface Handlers {
   onSelect: (id: string | null) => void;
 }
 
-type Tag = Record<'btn' | 'name' | 'state' | 'dot' | 'act' | 'ctx' | 'sub', HTMLElement>;
-
 /** One fixed desk. A session claims it; the agent sits down while it works and leaves when it is idle or offline. */
 class Desk {
   readonly index: number;
@@ -53,7 +50,6 @@ class Desk {
   summary: SessionSummary | null = null;
   hover = false;
   selected = false;
-  readonly label: CSS2DObject;
   private reduced: boolean;
   private chair = new THREE.Group();
   private holder = new THREE.Group();
@@ -70,29 +66,12 @@ class Desk {
   private glow = new THREE.Color();
   private occ = 0;
   private tuck = 1;
-  private el: Tag;
-  private cache = new Map<string, string>();
 
   constructor(index: number, reduced: boolean) {
     this.index = index;
     this.reduced = reduced;
     this.build();
 
-    const wrap = document.createElement('div');
-    wrap.className = 'tag-wrap';
-    wrap.innerHTML = `<button class="tag" type="button">
-      <span class="tag-name"></span>
-      <span class="tag-state"><i class="dot"></i><b></b><span class="ctx"><i></i></span></span>
-      <span class="tag-act"></span>
-      <span class="tag-sub"></span>
-    </button>`;
-    const q = (sel: string) => wrap.querySelector(sel) as HTMLElement;
-    this.el = { btn: q('.tag'), name: q('.tag-name'), state: q('.tag-state b'), dot: q('.dot'), act: q('.tag-act'), ctx: q('.ctx i'), sub: q('.tag-sub') };
-    this.label = new CSS2DObject(wrap);
-    this.label.center.set(0.5, 1);
-    this.label.position.set(0, 4.95, -1.2);
-    this.label.visible = false;
-    this.group.add(this.label);
     this.holder.visible = false;
     this.holder.scale.setScalar(0.001);
     this.chair.position.z = -0.45;
@@ -241,7 +220,6 @@ class Desk {
 
   assign(s: SessionSummary | null): void {
     this.summary = s;
-    this.label.visible = !!s;
     if (!s) {
       this.hover = false;
       this.selected = false;
@@ -258,28 +236,10 @@ class Desk {
       `${s.focus?.ts}${s.focus?.status}${s.focus?.text.length}`,
     ].join('|');
 
-    const set = (key: string, el: HTMLElement, text: string) => {
-      if (this.cache.get(key) === text) return;
-      this.cache.set(key, text);
-      el.textContent = text;
-    };
-    const subsRunning = s.subagents.filter((a) => a.status === 'running').length;
-    set('name', this.el.name, s.title);
-    set('state', this.el.state, stateText(s));
-    set('act', this.el.act, s.state === 'offline' ? '' : s.activity);
-    set('sub', this.el.sub, subsRunning ? `+ ${subsRunning} sub-agent${subsRunning > 1 ? 's' : ''}` : '');
-    this.el.ctx.style.width = `${Math.round((s.contextPct ?? 0) * 100)}%`;
-    this.el.btn.dataset.id = s.id;
-    this.el.btn.dataset.state = s.state;
-    this.el.btn.dataset.needs = NEEDS_YOU.includes(s.state) ? '1' : '0';
-    this.el.btn.setAttribute('aria-label', `${s.title}: ${STATE_LABEL[s.state]}. ${s.state === 'offline' ? '' : s.activity}`);
-    this.el.dot.style.background = STATE_COLOR[s.state];
-    this.el.btn.classList.toggle('is-selected', this.selected);
   }
 
   setSelected(v: boolean): void {
     this.selected = v;
-    this.el.btn.classList.toggle('is-selected', v);
   }
 
   update(t: number, dt: number): void {
@@ -332,7 +292,6 @@ class Desk {
     for (const m of this.minis) m.figure.dispose();
     for (const m of this.monitors) m.dispose();
     this.group.traverse((o) => (o as THREE.Mesh).geometry?.dispose?.());
-    this.label.element.remove();
   }
 }
 
@@ -340,7 +299,6 @@ export class OfficeScene {
   private container: HTMLElement;
   private handlers: Handlers;
   private renderer: THREE.WebGLRenderer;
-  private labels: CSS2DRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400);
   private controls: OrbitControls;
@@ -354,7 +312,6 @@ export class OfficeScene {
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   private clock = new THREE.Clock();
   private time = 0;
-  private frame = 0;
   private selectedId: string | null = null;
   private panelPx = 0;
   private userMoved = false;
@@ -377,10 +334,6 @@ export class OfficeScene {
     this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.className = 'gl';
-
-    this.labels = new CSS2DRenderer();
-    this.labels.domElement.className = 'labels';
-    container.appendChild(this.labels.domElement);
 
     this.scene.background = new THREE.Color(0x0e1217);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -425,10 +378,6 @@ export class OfficeScene {
         dom.style.cursor = hit >= 0 ? 'pointer' : 'grab';
         for (const d of this.desks) d.hover = d.index === hit;
       }
-    });
-    this.labels.domElement.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('button.tag') as HTMLElement | null;
-      if (btn?.dataset.id) this.handlers.onSelect(btn.dataset.id);
     });
 
     this.ensureDesks(capacityFor(0));
@@ -503,7 +452,6 @@ export class OfficeScene {
     this.selectedId = id;
     this.panelPx = panelPx;
     for (const d of this.desks) d.setSelected(!!id && d.summary?.id === id);
-    this.labels.domElement.classList.toggle('focus', !!id);
     this.applyView();
     if (id) this.focusDesk(id);
     else this.frameAll(true);
@@ -530,7 +478,7 @@ export class OfficeScene {
     if (idx === undefined) return;
     const p = this.desks[idx].group.position;
     this.userMoved = true;
-    this.go(new THREE.Vector3(p.x, p.y + 7.2, p.z + 4.8), new THREE.Vector3(p.x, p.y + 2.2, p.z - 1.2), true);
+    this.go(new THREE.Vector3(p.x, p.y + 7.6, p.z + 5.6), new THREE.Vector3(p.x, p.y + 2.3, p.z - 1.2), true);
   }
 
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {
@@ -557,22 +505,9 @@ export class OfficeScene {
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = `${w}px`;
     this.renderer.domElement.style.height = `${h}px`;
-    this.labels.setSize(w, h);
     this.camera.aspect = w / h;
     this.applyView();
     if (!this.userMoved && !this.selectedId) this.frameAll(false);
-  }
-
-  private updateTagScale(): void {
-    const first = this.desks[0];
-    if (!first) return;
-    const a = first.group.position.clone();
-    const b = a.clone().add(new THREE.Vector3(SPACING_X, 0, 0));
-    a.project(this.camera);
-    b.project(this.camera);
-    const px = Math.abs(b.x - a.x) * 0.5 * this.width;
-    const scale = Math.min(1.0, Math.max(0.5, px / 290));
-    this.labels.domElement.style.setProperty('--tag-scale', scale.toFixed(3));
   }
 
   private loop = (): void => {
@@ -588,9 +523,7 @@ export class OfficeScene {
     }
     this.controls.update();
     for (const d of this.desks) d.update(this.time, dt);
-    if (this.frame++ % 6 === 0) this.updateTagScale();
     this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
   };
 
   dispose(): void {

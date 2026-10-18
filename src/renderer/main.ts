@@ -328,7 +328,8 @@ function cycle(dir: number): void {
   const vis = visible();
   if (!vis.length) return;
   const i = vis.findIndex((s) => s.id === store.selectedId);
-  select(vis[(i + dir + vis.length) % vis.length].id);
+  const next = i < 0 ? (dir > 0 ? 0 : vis.length - 1) : (i + dir + vis.length) % vis.length;
+  select(vis[next].id);
 }
 
 function boot(): void {
@@ -375,8 +376,8 @@ function boot(): void {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (e.key === 'Escape') select(null);
-    else if (e.key === 'ArrowRight' && store.selectedId) cycle(1);
-    else if (e.key === 'ArrowLeft' && store.selectedId) cycle(-1);
+    else if (e.key === 'ArrowRight') cycle(1);
+    else if (e.key === 'ArrowLeft') cycle(-1);
   });
   window.addEventListener('resize', () => scene.setSelected(store.selectedId, panelPx()));
 
