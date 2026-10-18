@@ -3,9 +3,10 @@ import type { FeedItem, SessionSummary, ToolCategory } from '../core/types.ts';
 import { FAMILY_LABEL } from '../core/family.ts';
 import { STATE_COLOR, stateText } from './theme.ts';
 
-export const SCREEN_W = 760;
+export const SCREEN_W = 900;
 export const SCREEN_H = 400;
-export const STRIP_H = 164;
+export const TOP_W = 640;
+export const TOP_H = 360;
 
 const MONO = '"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace';
 const UI = '"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
@@ -65,7 +66,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
 
 function header(ctx: CanvasRenderingContext2D, title: string, right: string, color: string, rightColor = C.dim): void {
   ctx.fillStyle = C.bar;
-  ctx.fillRect(0, 0, SCREEN_W, 46);
+  ctx.fillRect(0, 0, ctx.canvas.width, 46);
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(PAD + 6, 23, 6, 0, Math.PI * 2);
@@ -78,7 +79,7 @@ function header(ctx: CanvasRenderingContext2D, title: string, right: string, col
   ctx.textAlign = 'right';
   ctx.font = `500 19px ${UI}`;
   ctx.fillStyle = rightColor;
-  ctx.fillText(fit(ctx, right, 330), SCREEN_W - PAD, 24);
+  ctx.fillText(fit(ctx, right, 330), ctx.canvas.width - PAD, 24);
   ctx.textAlign = 'left';
 }
 
@@ -107,14 +108,15 @@ function feedStyle(it: FeedItem): { icon: string; color: string; title: string }
   return { icon: '·', color: C.dim, title: it.title };
 }
 
-/** Top monitor (wide strip): the agent's recent activity, newest at the bottom. */
+/** Top (16:9) monitor: the agent's recent activity, newest at the bottom. */
 export function drawActivity(ctx: CanvasRenderingContext2D, s: SessionSummary, phase: number): void {
+  const W = ctx.canvas.width;
   const H = ctx.canvas.height;
   ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, SCREEN_W, H);
+  ctx.fillRect(0, 0, W, H);
   header(ctx, 'Activity', `${FAMILY_LABEL[s.family]} · ${s.model || '?'}`, STATE_COLOR[s.state]);
   ctx.textBaseline = 'middle';
-  const items = s.feed.slice(-4);
+  const items = s.feed.slice(-Math.floor((H - 62) / LH));
   if (!items.length) {
     ctx.font = `500 22px ${UI}`;
     ctx.fillStyle = C.dim;
@@ -133,11 +135,11 @@ export function drawActivity(ctx: CanvasRenderingContext2D, s: SessionSummary, p
     ctx.fillText(fit(ctx, st.title, 150), PAD + 40, y);
     ctx.font = `500 21px ${MONO}`;
     ctx.fillStyle = C.dim;
-    ctx.fillText(fit(ctx, it.text, SCREEN_W - PAD * 2 - 40 - Math.min(150, tw) - 44), PAD + 40 + Math.min(150, tw) + 14, y);
+    ctx.fillText(fit(ctx, it.text, W - PAD * 2 - 40 - Math.min(150, tw) - 44), PAD + 40 + Math.min(150, tw) + 14, y);
     ctx.font = `700 21px ${MONO}`;
     ctx.fillStyle = gcol;
     ctx.textAlign = 'right';
-    ctx.fillText(glyph, SCREEN_W - PAD, y);
+    ctx.fillText(glyph, W - PAD, y);
     ctx.textAlign = 'left';
     y += LH;
   }

@@ -27,7 +27,7 @@ Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agen
 
 A desk is **occupied** while its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled. **Idle** and **offline** agents leave it empty (their name tag stays so you can still click them). Desks are numbered and keep their session for as long as it is listed.
 
-Every desk has **two monitors** that update live � one big screen straight ahead and a wide one stacked on top of it:
+Every desk has **two monitors** that update live � an ultrawide screen straight ahead and a narrower 16:9 one stacked above it, with a light bar between them:
 
 - **Left — Activity:** the agent's recent prompts, tool calls and results, newest at the bottom, with running / ok / failed marks.
 - **Right — Focus:** what it is doing right now — the terminal command and its output, the file it is reading, the patch it is writing (green/red lines), web results, the sub-agents it started, the question it asks you, the permission it waits for, or its latest message while it thinks.

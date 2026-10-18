@@ -7,7 +7,7 @@ import type { SessionSummary } from '../core/types.ts';
 import { Figure, poseFor } from './figures.ts';
 import { Hall } from './hall.ts';
 import { capacityFor, COLS, deskPos, hallSize, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
-import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, STRIP_H } from './screens.ts';
+import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, TOP_H, TOP_W } from './screens.ts';
 import { isOccupied, NEEDS_YOU, STATE_COLOR, STATE_LABEL, stateText } from './theme.ts';
 
 const MINI_SPOTS: [number, number][] = [[-1.75, 0.55], [1.75, 0.55], [-1.35, 1.5]];
@@ -90,7 +90,7 @@ class Desk {
     this.el = { btn: q('.tag'), name: q('.tag-name'), state: q('.tag-state b'), dot: q('.dot'), act: q('.tag-act'), ctx: q('.ctx i'), sub: q('.tag-sub') };
     this.label = new CSS2DObject(wrap);
     this.label.center.set(0.5, 1);
-    this.label.position.set(0, 4.35, -1.2);
+    this.label.position.set(0, 4.95, -1.2);
     this.label.visible = false;
     this.group.add(this.label);
     this.holder.visible = false;
@@ -136,19 +136,22 @@ class Desk {
     mouse.position.set(0.8, 0.83, -0.66);
     g.add(keyboard, mouse);
 
-    // One big monitor straight ahead with a wide second one stacked on top. They face the room (and the
-    // camera); the agent works with its back to us. Order in `monitors`: [top strip, main].
+    // Ultrawide monitor below, a narrower 16:9 one centred above it with a soundbar in between (order in `monitors`: [top, main]).
     const frameMat = stdMat(0x14171c, 0.45, 0.5);
     const rig = new THREE.Group();
     rig.position.set(0, 0.95, -1.2);
     rig.rotation.x = -0.28;
-    const main = new Monitor(3.8, 2.05, SCREEN_W, SCREEN_H);
-    main.group.position.y = 2.05 / 2;
-    const strip = new Monitor(3.8, 0.9, SCREEN_W, STRIP_H);
-    strip.group.position.y = 2.05 + 0.03 + 0.45;
-    rig.add(main.group, strip.group);
+    const main = new Monitor(3.8, 1.75, SCREEN_W, SCREEN_H);
+    main.group.position.y = 1.75 / 2;
+    const upper = new Monitor(3.1, 1.79, TOP_W, TOP_H);
+    upper.group.position.y = 1.75 + 0.14 + 1.79 / 2;
+    const bar = box(2.4, 0.09, 0.12, 0.03, frameMat);
+    bar.position.set(0, 1.75 + 0.07, 0.0);
+    const barGlow = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.012, 0.01), new THREE.MeshBasicMaterial({ color: 0x35d6c4, toneMapped: false }));
+    barGlow.position.set(0, 1.75 + 0.07, 0.065);
+    rig.add(main.group, upper.group, bar, barGlow);
     g.add(rig);
-    this.monitors.push(strip, main);
+    this.monitors.push(upper, main);
     const neck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.08), frameMat);
     neck.position.set(0, 0.86, -1.25);
     const foot = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.025, 0.46), frameMat);
@@ -311,16 +314,16 @@ class Desk {
   }
 
   private drawScreens(s: SessionSummary | null, t: number): void {
-    const [strip, main] = this.monitors;
+    const [top, main] = this.monitors;
     if (!s) {
-      strip.render(null, 'off', 0x2a2f36);
+      top.render(null, 'off', 0x2a2f36);
       main.render(null, 'off', 0x2a2f36);
       return;
     }
     const phase = this.reduced ? 0 : Math.floor(t * 2.4);
     const key = `${this.screenSig}|${phase}`;
     const led = this.color.getHex();
-    strip.render((ctx) => drawActivity(ctx, s, phase), key, led);
+    top.render((ctx) => drawActivity(ctx, s, phase), key, led);
     main.render((ctx) => drawFocus(ctx, s, phase, Date.now()), key, led);
   }
 
@@ -514,7 +517,7 @@ export class OfficeScene {
     const pitch = (53 * Math.PI) / 180;
     const usableW = Math.max(300, this.width - this.panelPx);
     const usableH = Math.max(300, this.height - 120);
-    const needH = rows * SPACING_Z * Math.sin(pitch) + 9.4;
+    const needH = rows * SPACING_Z * Math.sin(pitch) + 10.2;
     const needW = COLS * SPACING_X + 7;
     const distV = needH / 2 / (half * (usableH / this.height));
     const distH = needW / 2 / (half * aspect * (usableW / this.width));
@@ -568,7 +571,7 @@ export class OfficeScene {
     a.project(this.camera);
     b.project(this.camera);
     const px = Math.abs(b.x - a.x) * 0.5 * this.width;
-    const scale = Math.min(1.05, Math.max(0.5, px / 245));
+    const scale = Math.min(1.0, Math.max(0.5, px / 290));
     this.labels.domElement.style.setProperty('--tag-scale', scale.toFixed(3));
   }
 
