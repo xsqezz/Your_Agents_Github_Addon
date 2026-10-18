@@ -21,7 +21,13 @@ npm run pack
 
 Other scripts: `npm test`, `npm run typecheck`.
 
-Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
+Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--room <id>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
+
+## Rooms
+
+There is one hall per **session folder** of the GitHub Copilot app — the projects in its Sessions sidebar, in the same order, plus **Chats**. Sessions that belong to no listed folder land in an **Other sessions** room. Every room has its own ten desks; the room name is painted on the floor.
+
+Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / `PageDown` (or `Alt+↑` / `Alt+↓`), or by selecting an agent that lives elsewhere (for example from a notification). A yellow badge on a room means agents there need you, a green one counts the agents working. Each room remembers which agent sits at which desk. The first room shown is the one you used last, otherwise the first with something going on. Only sessions active in the last three days are listed (up to 12 per room).
 
 ## What you see
 

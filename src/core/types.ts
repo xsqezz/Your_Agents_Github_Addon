@@ -71,8 +71,21 @@ export interface FocusInfo {
   ts: number;
 }
 
+export interface RoomInfo {
+  id: string;
+  name: string;
+  kind: 'project' | 'chats' | 'other';
+}
+
+export interface Snapshot {
+  rooms: RoomInfo[];
+  sessions: SessionSummary[];
+}
+
 export interface SessionSummary {
   id: string;
+  /** Room (project folder, "chats" or "other") the session belongs to. */
+  room: string;
   title: string;
   project?: string;
   branch?: string;

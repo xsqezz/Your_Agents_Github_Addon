@@ -89,6 +89,9 @@ function skyTexture(): THREE.CanvasTexture {
 export class Hall {
   readonly group = new THREE.Group();
   private built: THREE.Object3D | null = null;
+  private sign: THREE.Mesh | null = null;
+  private title = '';
+  private rows = 1;
 
   build(rows: number): void {
     this.clear();
@@ -234,6 +237,60 @@ export class Hall {
 
     this.group.add(root);
     this.built = root;
+    this.rows = rows;
+    this.placeSign();
+  }
+
+  /** The room name, painted on the floor in front of the last desk row. */
+  setTitle(name: string): void {
+    if (name === this.title) return;
+    this.title = name;
+    this.placeSign();
+  }
+
+  private placeSign(): void {
+    if (this.sign) {
+      this.group.remove(this.sign);
+      (this.sign.material as THREE.MeshBasicMaterial).map?.dispose();
+      (this.sign.material as THREE.Material).dispose();
+      this.sign.geometry.dispose();
+      this.sign = null;
+    }
+    if (!this.built || !this.title) return;
+    const cw = 1536;
+    const ch = 160;
+    const c = document.createElement('canvas');
+    c.width = cw;
+    c.height = ch;
+    const g = c.getContext('2d')!;
+    const label = this.title.toUpperCase();
+    let size = 104;
+    g.font = `700 ${size}px "Segoe UI", system-ui, sans-serif`;
+    const spacing = 0.12;
+    const measure = (): number => g.measureText(label).width + label.length * size * spacing;
+    while (measure() > cw - 40 && size > 24) {
+      size -= 4;
+      g.font = `700 ${size}px "Segoe UI", system-ui, sans-serif`;
+    }
+    (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${(size * spacing).toFixed(1)}px`;
+    g.fillStyle = 'rgba(20,20,20,0.82)';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(label, cw / 2 + (size * spacing) / 2, ch / 2);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    const { w: W, d: D } = hallSize(this.rows);
+    const width = Math.min(W - 6, 15);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, (width * ch) / cw),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(0, 0.02, D / 2 - 1.1);
+    mesh.renderOrder = 1;
+    this.sign = mesh;
+    this.group.add(mesh);
   }
 
   private clear(): void {

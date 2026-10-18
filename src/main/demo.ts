@@ -1,5 +1,5 @@
 import { familyOf, tierOf } from '../core/family.ts';
-import type { AgentState, FeedItem, FocusInfo, SessionDetail, SessionSummary, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
+import type { AgentState, FeedItem, FocusInfo, RoomInfo, SessionDetail, SessionSummary, Snapshot, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
 import type { Source, SourceInfo } from './source.ts';
 
 interface Step {
@@ -38,6 +38,15 @@ const TITLES = [
   'Triage crash reports', 'Speed up CI pipeline', 'Port parser to Rust', 'Review auth PR', 'Clean up feature flags',
   'Upgrade Electron', 'Localize onboarding', 'Audit dependencies', 'Prototype search UI',
 ];
+
+/** The rooms of the Copilot app's Sessions sidebar, as a demo. */
+const DEMO_ROOM_NAMES = ['ur-agents', 'sqezz.best', 'Sqezist-App---Minecraft-Client-', 'koziolpawelpagepreview', 'axifek-community-bot', 'Delay-spawning-in-Minecraft', 'exosware-1.21.4-main', 'sqezz-client', '7liceumKlasa1A.online', 'sqezzbio', 'flexa.click', 'Copilot-Meter'];
+const DEMO_ROOMS: RoomInfo[] = [
+  ...DEMO_ROOM_NAMES.map((name, i): RoomInfo => ({ id: `demo-room-${i}`, name, kind: 'project' })),
+  { id: 'chats', name: 'Chats', kind: 'chats' },
+];
+/** Which room each demo agent sits in (index into DEMO_ROOMS). */
+const ROOM_OF = [0, 0, 0, 1, 1, 2, 2, 3, 5, 9, 12, 12, 10, 4];
 
 const SUB_NAMES = ['Explorer', 'Researcher', 'Builder'];
 const SUB_MODELS = ['gpt-6-astra', 'claude-sonnet-5', 'gemini-3.8-flash'];
@@ -88,7 +97,7 @@ export class DemoSource implements Source {
   private timer: NodeJS.Timeout | null = null;
   private lastJson = '';
   private startedAt = Date.now();
-  private onUpdate: (list: SessionSummary[]) => void = () => {};
+  private onUpdate: (snapshot: Snapshot) => void = () => {};
 
   constructor(models?: string[]) {
     this.models = models && models.length ? models : MODELS.slice(0, 10);
@@ -98,7 +107,7 @@ export class DemoSource implements Source {
     return { mode: 'demo', home: 'synthetic demo data' };
   }
 
-  async start(onUpdate: (list: SessionSummary[]) => void): Promise<void> {
+  async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
     this.onUpdate = onUpdate;
     const count = this.models.length;
     this.agents = Array.from({ length: count }, (_, index) => {
@@ -137,7 +146,7 @@ export class DemoSource implements Source {
   }
 
   summaries(): SessionSummary[] {
-    return JSON.parse(this.lastJson || '[]') as SessionSummary[];
+    return (JSON.parse(this.lastJson || '{"sessions":[]}') as Snapshot).sessions;
   }
 
   /** Simulated effect of a control command on a demo agent. */
@@ -196,8 +205,9 @@ export class DemoSource implements Source {
       }));
       list.push({
         id: `demo-${a.index}`,
+        room: DEMO_ROOMS[ROOM_OF[a.index % ROOM_OF.length]].id,
         title: TITLES[a.index % TITLES.length],
-        project: ['ur-agents', 'billing', 'docs', 'web'][a.index % 4],
+        project: DEMO_ROOMS[ROOM_OF[a.index % ROOM_OF.length]].name,
         branch: `feat/${TITLES[a.index % TITLES.length].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
         model, family: familyOf(model), tier: tierOf(model),
         mode: a.index % 3 === 0 ? 'autopilot' : 'interactive',
@@ -210,10 +220,11 @@ export class DemoSource implements Source {
         subagents, pending: step.pending, feed, focus, hasEvents: true,
       });
     }
-    const json = JSON.stringify(list);
+    const snapshot: Snapshot = { rooms: DEMO_ROOMS, sessions: list };
+    const json = JSON.stringify(snapshot);
     if (json !== this.lastJson) {
       this.lastJson = json;
-      this.onUpdate(list);
+      this.onUpdate(snapshot);
     }
   }
 }

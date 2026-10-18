@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { familyOf, tierOf } from '../core/family.ts';
-import type { SessionDetail, SessionSummary } from '../core/types.ts';
+import type { RoomInfo, SessionDetail, SessionSummary, Snapshot } from '../core/types.ts';
 import { AppDb, type AppSessionInfo } from './appdb.ts';
 import type { Source, SourceInfo } from './source.ts';
 import { eventsPath, livePid, Tailer } from './tailer.ts';
@@ -10,8 +10,11 @@ import { eventsPath, livePid, Tailer } from './tailer.ts';
 const TICK_MS = 800;
 const DB_REFRESH_MS = 2500;
 const DIR_SCAN_MS = 6000;
-const RECENT_MS = 6 * 3600_000;
-const MAX_SESSIONS = 24;
+const RECENT_MS = 3 * 24 * 3600_000;
+const DESKS_PER_ROOM = 10;
+const MAX_SESSIONS = 90;
+const CHATS_ROOM = 'chats';
+const OTHER_ROOM = 'other';
 
 export function resolveHome(arg?: string): string {
   return arg || process.env.COPILOT_HOME || path.join(os.homedir(), '.copilot');
@@ -21,6 +24,7 @@ interface Candidate {
   id: string;
   db?: AppSessionInfo;
   activity: number;
+  room?: string;
 }
 
 function parseTs(s?: string | null): number {
@@ -43,7 +47,9 @@ export class LiveSource implements Source {
   private dirRecent = new Map<string, number>();
   private lastJson = '';
   private busy = false;
-  private onUpdate: (list: SessionSummary[]) => void = () => {};
+  private projects: { id: string; name: string }[] = [];
+  private roomById = new Map<string, string>();
+  private onUpdate: (snapshot: Snapshot) => void = () => {};
 
   constructor(home: string) {
     this.home = home;
@@ -55,7 +61,7 @@ export class LiveSource implements Source {
     return { mode: 'live', home: this.home };
   }
 
-  async start(onUpdate: (list: SessionSummary[]) => void): Promise<void> {
+  async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
     this.onUpdate = onUpdate;
     await this.tick();
     this.timer = setInterval(() => void this.tick(), TICK_MS);
@@ -81,6 +87,7 @@ export class LiveSource implements Source {
       if (now - this.lastDbAt > DB_REFRESH_MS) {
         this.lastDbAt = now;
         this.dbInfo = new Map(this.appDb.listSessions().map((s) => [s.id, s]));
+        this.projects = this.appDb.listProjects();
       }
       if (now - this.lastScanAt > DIR_SCAN_MS) {
         this.lastScanAt = now;
@@ -128,10 +135,24 @@ export class LiveSource implements Source {
     for (const c of pool.values()) {
       const pid = livePid(this.stateDir, c.id);
       if (pid) this.liveSet.add(c.id);
-      if (pid || c.db?.is_running || now - c.activity < RECENT_MS) chosen.push(c);
+      if (!(pid || c.db?.is_running || now - c.activity < RECENT_MS)) continue;
+      const room = this.roomOf(c.db);
+      if (!room) continue;
+      c.room = room;
+      chosen.push(c);
     }
-    chosen.sort((a, b) => Number(this.liveSet.has(b.id)) - Number(this.liveSet.has(a.id)) || b.activity - a.activity);
-    const keep = new Set(chosen.slice(0, MAX_SESSIONS).map((c) => c.id));
+    const score = (c: Candidate): number => Number(this.liveSet.has(c.id)) * 2 + Number(!!c.db?.is_running);
+    chosen.sort((a, b) => score(b) - score(a) || b.activity - a.activity);
+    const perRoom = new Map<string, number>();
+    const kept: Candidate[] = [];
+    for (const c of chosen) {
+      const n = perRoom.get(c.room!) ?? 0;
+      if (n >= DESKS_PER_ROOM + 2 || kept.length >= MAX_SESSIONS) continue;
+      perRoom.set(c.room!, n + 1);
+      kept.push(c);
+    }
+    this.roomById = new Map(kept.map((c) => [c.id, c.room!]));
+    const keep = new Set(kept.map((c) => c.id));
 
     for (const id of [...this.order]) {
       if (!keep.has(id)) {
@@ -139,14 +160,29 @@ export class LiveSource implements Source {
         this.order = this.order.filter((x) => x !== id);
       }
     }
-    for (const c of chosen) {
-      if (!keep.has(c.id) || this.tailers.has(c.id)) continue;
+    for (const c of kept) {
+      if (this.tailers.has(c.id)) continue;
       const t = new Tailer(c.id, eventsPath(this.stateDir, c.id));
       this.tailers.set(c.id, t);
       this.order.push(c.id);
       t.poll();
       await new Promise((r) => setImmediate(r));
     }
+  }
+
+  /** Which room a session lives in: its project folder, Chats, or Other (CLI sessions the app does not know). */
+  private roomOf(db?: AppSessionInfo): string | null {
+    if (db?.session_type === 'general_chat') return CHATS_ROOM;
+    if (db?.session_type === 'side_chat') return null;
+    if (db?.projectId && this.projects.length) return this.projects.some((p) => p.id === db.projectId) ? db.projectId : null;
+    return OTHER_ROOM;
+  }
+
+  private rooms(used: Set<string>): RoomInfo[] {
+    const rooms: RoomInfo[] = this.projects.map((p) => ({ id: p.id, name: p.name, kind: 'project' }));
+    rooms.push({ id: CHATS_ROOM, name: 'Chats', kind: 'chats' });
+    if (used.has(OTHER_ROOM)) rooms.push({ id: OTHER_ROOM, name: 'Other sessions', kind: 'other' });
+    return rooms;
   }
 
   private publish(now: number): void {
@@ -162,6 +198,7 @@ export class LiveSource implements Source {
       const tokens = db?.context_current_tokens ?? undefined;
       list.push({
         id,
+        room: this.roomById.get(id) ?? OTHER_ROOM,
         title: db?.title?.trim() || db?.workspaceName || id.slice(0, 8),
         project: db?.project ?? undefined,
         branch: db?.branch ?? undefined,
@@ -178,10 +215,11 @@ export class LiveSource implements Source {
         hasEvents: t.hasEvents,
       });
     }
-    const json = JSON.stringify(list);
+    const snapshot: Snapshot = { rooms: this.rooms(new Set(list.map((s) => s.room))), sessions: list };
+    const json = JSON.stringify(snapshot);
     if (json !== this.lastJson) {
       this.lastJson = json;
-      this.onUpdate(list);
+      this.onUpdate(snapshot);
     }
   }
 }

@@ -1,5 +1,5 @@
 import { FAMILY_LABEL } from '../core/family.ts';
-import type { AgentState, SessionDetail, SessionSummary, TimelineItem } from '../core/types.ts';
+import type { AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
 import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
 import { initControl, renderControl } from './control.ts';
 import { OfficeScene } from './scene.ts';
@@ -10,9 +10,9 @@ declare global {
   interface Window {
     ua: {
       info(): Promise<{ mode: 'live' | 'demo'; home: string }>;
-      list(): Promise<SessionSummary[]>;
+      list(): Promise<Snapshot>;
       detail(id: string, since: number): Promise<SessionDetail | null>;
-      onSummaries(cb: (list: SessionSummary[]) => void): void;
+      onSummaries(cb: (snapshot: Snapshot) => void): void;
       onFocus(cb: (id: string) => void): void;
       controlState(): Promise<ControlState>;
       controlSetEnabled(on: boolean): Promise<void>;
@@ -38,6 +38,9 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 const params = new URLSearchParams(location.search);
 const store = {
   all: [] as SessionSummary[],
+  rooms: [] as RoomInfo[],
+  room: params.get('room') ?? localStorage.getItem('ua.room') ?? '',
+  roomPinned: params.get('room') != null || localStorage.getItem('ua.room') != null,
   selectedId: null as string | null,
   view: (params.get('view') ?? localStorage.getItem('ua.view') ?? '3d') as '3d' | 'list',
   showOffline: localStorage.getItem('ua.offline') === '1',
@@ -57,11 +60,15 @@ let scene: OfficeScene;
 let announcedStates = new Map<string, AgentState>();
 let primed = false;
 
-function visible(): SessionSummary[] {
-  return store.showOffline ? store.all : store.all.filter((s) => s.state !== 'offline');
-}
+const shown = (list: SessionSummary[]): SessionSummary[] => (store.showOffline ? list : list.filter((s) => s.state !== 'offline'));
+/** Agents in the room you are in. */
+const visible = (): SessionSummary[] => shown(store.all.filter((s) => s.room === store.room));
+/** Agents in every room (list view). */
+const visibleEverywhere = (): SessionSummary[] => shown(store.all);
+const currentRoom = (): RoomInfo | undefined => store.rooms.find((r) => r.id === store.room);
 const selected = (): SessionSummary | undefined => store.all.find((s) => s.id === store.selectedId);
 const panelPx = (): number => (store.selectedId ? Math.min(440, Math.round(window.innerWidth * 0.46)) : 0);
+const roomsPx = (): number => (store.rooms.length > 1 ? 228 : 0);
 
 /* ───────────── top bar ───────────── */
 
@@ -100,15 +107,85 @@ function renderStatus(): void {
     h('span', { text }),
     h('span', { class: 'spacer' }),
     ...(unseated ? [h('span', { text: `${unseated} more without a desk — see List view` })] : []),
-    h('span', { text: `${Math.min(occupied, MIN_DESKS)} of ${MIN_DESKS} desks occupied` }),
+    h('span', { text: `${currentRoom()?.name ?? 'Room'} · ${Math.min(occupied, MIN_DESKS)} of ${MIN_DESKS} desks occupied` }),
   );
+}
+
+/* ───────────── rooms ───────────── */
+
+const roomStats = (id: string): { needs: number; working: number; total: number } => {
+  const list = store.all.filter((s) => s.room === id);
+  return {
+    needs: list.filter((s) => NEEDS_YOU.includes(s.state)).length,
+    working: list.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length,
+    total: list.length,
+  };
+};
+
+let roomsSig = '';
+
+function renderRooms(): void {
+  const box = $('rooms');
+  const multi = store.rooms.length > 1;
+  box.hidden = !multi;
+  document.body.classList.toggle('has-rooms', multi);
+  if (!multi) return;
+  const sig = store.rooms
+    .map((r) => {
+      const st = roomStats(r.id);
+      return `${r.id}:${r.name}:${st.needs}:${st.working}:${r.id === store.room ? 1 : 0}`;
+    })
+    .join('|');
+  if (sig === roomsSig) return;
+  roomsSig = sig;
+  const hadFocus = box.contains(document.activeElement);
+  const rows = store.rooms.map((r) => {
+    const st = roomStats(r.id);
+    const btn = h(
+      'button',
+      { class: 'room', attrs: { type: 'button', 'data-room': r.id, 'data-kind': r.kind, 'aria-current': String(r.id === store.room), title: r.name } },
+      h('span', { class: 'room-ico', attrs: { 'aria-hidden': 'true' } }),
+      h('span', { class: 'room-name', text: r.name }),
+      st.needs > 0 ? h('span', { class: 'badge needs', text: String(st.needs), attrs: { 'aria-label': `${st.needs} need you` } }) : null,
+      st.working > 0 ? h('span', { class: 'badge work', text: String(st.working), attrs: { 'aria-label': `${st.working} working` } }) : null,
+    );
+    return h('li', {}, btn);
+  });
+  $('room-list').replaceChildren(...rows);
+  $('rooms-count').textContent = String(store.rooms.length);
+  const cur = $('room-list').querySelector<HTMLElement>('[aria-current="true"]');
+  cur?.scrollIntoView({ block: 'nearest' });
+  if (hadFocus) cur?.focus({ preventScroll: true });
+}
+
+/** Moves to another room (the agent panel closes unless the selected agent lives there). */
+function switchRoom(id: string, keepSelection = false): void {
+  if (id === store.room || !store.rooms.some((r) => r.id === id)) return;
+  store.room = id;
+  store.roomPinned = true;
+  localStorage.setItem('ua.room', id);
+  if (!keepSelection) select(null);
+  render();
+}
+
+function stepRoom(dir: number): void {
+  if (store.rooms.length < 2) return;
+  const i = store.rooms.findIndex((r) => r.id === store.room);
+  switchRoom(store.rooms[(i + dir + store.rooms.length) % store.rooms.length].id);
+}
+
+/** Picks the first room to show: the saved/pinned one, else the room where something is going on. */
+function pickRoom(): void {
+  if (store.rooms.some((r) => r.id === store.room)) return;
+  const hot = store.rooms.find((r) => roomStats(r.id).needs > 0) ?? store.rooms.find((r) => roomStats(r.id).working > 0) ?? store.rooms.find((r) => roomStats(r.id).total > 0);
+  store.room = (hot ?? store.rooms[0])?.id ?? '';
 }
 
 /* ───────────── list view ───────────── */
 
 function renderList(): void {
   if (store.view !== 'list') return;
-  const rows = visible();
+  const rows = visibleEverywhere();
   const head = h('thead', {}, h('tr', {}, ...['State', 'Agent', 'Model', 'Doing now', 'Context', 'Cost', 'Active'].map((t) => h('th', { text: t, attrs: { scope: 'col' } }))));
   const body = h('tbody');
   const now = Date.now();
@@ -292,6 +369,8 @@ async function pollDetail(): Promise<void> {
 
 function select(id: string | null): void {
   if (id === store.selectedId) return;
+  const target = id ? store.all.find((s) => s.id === id) : undefined;
+  if (target && target.room !== store.room) switchRoom(target.room);
   store.selectedId = id;
   store.since = 0;
   store.follow = true;
@@ -305,16 +384,20 @@ function select(id: string | null): void {
 }
 
 function render(): void {
+  pickRoom();
   renderTopbar();
   renderStatus();
+  renderRooms();
   const vis = visible();
-  scene.setSessions(vis);
+  scene.setInsets(roomsPx());
+  scene.setSessions(vis, store.room, currentRoom()?.name ?? '');
   emptyEl.hidden = vis.length > 0 || store.view !== '3d';
   if (!vis.length) {
-    const hidden = store.all.length;
+    const hidden = store.all.filter((s) => s.room === store.room).length;
+    emptyEl.querySelector('h2')!.textContent = `All desks are free in ${currentRoom()?.name ?? 'this room'}`;
     emptyEl.querySelector('p')!.textContent = hidden
-      ? `${hidden} recent session${hidden > 1 ? 's are' : ' is'} offline. Turn on “Show offline” to see them.`
-      : 'Start an agent in the GitHub Copilot app and it takes a desk here. Run with --demo to preview the hall.';
+      ? `${hidden} session${hidden > 1 ? 's are' : ' is'} offline here. Turn on “Show offline” to see them.`
+      : 'No agent is working in this folder. Start one in the GitHub Copilot app and it takes a desk.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
@@ -350,6 +433,8 @@ function boot(): void {
     const t = e.target as HTMLElement;
     const open = t.closest<HTMLElement>('.row-open');
     if (open?.dataset.id) select(open.dataset.id);
+    const room = t.closest<HTMLElement>('[data-room]');
+    if (room?.dataset.room) switchRoom(room.dataset.room);
     if (t.closest('#panel-close')) select(null);
     const view = t.closest<HTMLElement>('[data-view]');
     if (view) {
@@ -389,12 +474,23 @@ function boot(): void {
     if (e.key === 'Escape') select(null);
     else if (e.key === 'ArrowRight') cycle(1);
     else if (e.key === 'ArrowLeft') cycle(-1);
+    else if (e.key === 'PageDown' || (e.altKey && e.key === 'ArrowDown')) {
+      e.preventDefault();
+      stepRoom(1);
+    } else if (e.key === 'PageUp' || (e.altKey && e.key === 'ArrowUp')) {
+      e.preventDefault();
+      stepRoom(-1);
+    }
   });
-  window.addEventListener('resize', () => scene.setSelected(store.selectedId, panelPx()));
+  window.addEventListener('resize', () => {
+    scene.setInsets(roomsPx());
+    scene.setSelected(store.selectedId, panelPx());
+  });
 
-  window.ua.onSummaries((list) => {
-    store.all = list;
-    announce(list);
+  window.ua.onSummaries((snap) => {
+    store.all = snap.sessions;
+    store.rooms = snap.rooms;
+    announce(snap.sessions);
     render();
   });
   window.ua.onFocus((id) => select(id));
@@ -410,7 +506,9 @@ async function start(): Promise<void> {
   const info = await window.ua.info();
   store.mode = info.mode;
   store.home = info.home;
-  store.all = await window.ua.list();
+  const snap = await window.ua.list();
+  store.all = snap.sessions;
+  store.rooms = snap.rooms;
   announce(store.all);
   render();
   const sel = params.get('select');

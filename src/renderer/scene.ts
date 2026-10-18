@@ -242,6 +242,16 @@ class Desk {
     this.selected = v;
   }
 
+  /** Jump straight to the resting pose (used when switching rooms). */
+  snap(): void {
+    const s = this.summary;
+    const sitting = !!s && isOccupied(s.state);
+    const faceRoom = !!s && (NEEDS_YOU.includes(s.state) || s.state === 'done');
+    this.occ = sitting ? 1 : 0;
+    this.tuck = sitting ? 0 : 1;
+    this.swivel = faceRoom ? 0 : Math.PI;
+  }
+
   update(t: number, dt: number): void {
     const s = this.summary;
     const sitting = !!s && isOccupied(s.state);
@@ -306,6 +316,10 @@ export class OfficeScene {
   private hall = new Hall();
   private desks: Desk[] = [];
   private assigned = new Map<string, number>();
+  private byRoom = new Map<string, Map<string, number>>();
+  private roomId = '';
+  private snapAll = false;
+  private leftPx = 0;
   private rows = 0;
   private raycaster = new THREE.Raycaster();
   private ndc = new THREE.Vector2();
@@ -425,8 +439,20 @@ export class OfficeScene {
     return Math.floor(index / COLS) === 0;
   }
 
-  /** Always exactly MIN_DESKS desks. With more sessions than desks, working agents get seats first. */
-  setSessions(list: SessionSummary[]): void {
+  /** Always exactly MIN_DESKS desks per room. With more sessions than desks, working agents get seats first. */
+  setSessions(list: SessionSummary[], roomId: string, roomName: string): void {
+    if (roomId !== this.roomId) {
+      this.roomId = roomId;
+      for (const d of this.desks) {
+        d.assign(null);
+        d.snap();
+      }
+      this.assigned = this.byRoom.get(roomId) ?? new Map<string, number>();
+      this.byRoom.set(roomId, this.assigned);
+      this.snapAll = true;
+    }
+    this.hall.setTitle(roomName);
+
     const byId = new Map(list.map((s) => [s.id, s]));
     const ranked = list
       .map((s, i) => ({ s, i }))
@@ -441,17 +467,30 @@ export class OfficeScene {
       if (this.selectedId === id) this.handlers.onSelect(null);
     }
     this.ensureDesks(MIN_DESKS);
+    const taken = new Set(this.assigned.values());
     for (const { s } of ranked) {
       if (this.assigned.has(s.id)) continue;
-      const free = this.desks.find((d) => !d.summary);
+      const free = this.desks.find((d) => !taken.has(d.index));
       if (!free) continue;
+      taken.add(free.index);
       this.assigned.set(s.id, free.index);
-      free.assign(s);
     }
     for (const { s } of ranked) {
       const idx = this.assigned.get(s.id);
       if (idx !== undefined) this.desks[idx].assign(s);
     }
+    if (this.snapAll) {
+      for (const d of this.desks) d.snap();
+      this.snapAll = false;
+    }
+  }
+
+  /** Space taken by the room list on the left; the camera centres the hall in what is left. */
+  setInsets(left: number): void {
+    if (left === this.leftPx) return;
+    this.leftPx = left;
+    this.applyView();
+    if (!this.userMoved && !this.selectedId) this.frameAll(false);
   }
 
   setSelected(id: string | null, panelPx: number): void {
@@ -469,7 +508,7 @@ export class OfficeScene {
     const half = Math.tan((this.camera.fov * Math.PI) / 360);
     const aspect = this.width / this.height;
     const pitch = (53 * Math.PI) / 180;
-    const usableW = Math.max(300, this.width - this.panelPx);
+    const usableW = Math.max(300, this.width - this.panelPx - this.leftPx);
     const usableH = Math.max(300, this.height - 120);
     const needH = rows * SPACING_Z * Math.sin(pitch) + 8.2;
     const needW = COLS * SPACING_X + 6.5;
@@ -500,7 +539,8 @@ export class OfficeScene {
   }
 
   private applyView(): void {
-    if (this.panelPx > 0) this.camera.setViewOffset(this.width, this.height, this.panelPx / 2, 0, this.width, this.height);
+    const shift = (this.panelPx - this.leftPx) / 2;
+    if (shift !== 0) this.camera.setViewOffset(this.width, this.height, shift, 0, this.width, this.height);
     else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
   }

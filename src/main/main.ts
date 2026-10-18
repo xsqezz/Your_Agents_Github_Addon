@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, Notification } from 'electron';
-import type { AgentState, SessionSummary } from '../core/types.ts';
+import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
 import type { Controller } from '../core/control.ts';
 import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
@@ -25,7 +25,7 @@ const ATTENTION: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error
 let win: BrowserWindow | null = null;
 let source: Source;
 let control: Controller;
-let latest: SessionSummary[] = [];
+let latest: Snapshot = { rooms: [], sessions: [] };
 let primed = false;
 const lastStates = new Map<string, AgentState>();
 
@@ -73,6 +73,8 @@ function createWindow(): void {
   if (sel !== undefined) query.select = sel;
   const view = arg('view');
   if (view) query.view = view;
+  const room = arg('room');
+  if (room) query.room = room;
   void win.loadFile(path.join(__dirname, 'index.html'), { query });
 
   if (shotFile) {
@@ -114,10 +116,10 @@ app.whenReady().then(async () => {
   createWindow();
   await control.start();
   if (demo && has('control')) control.setEnabled(true);
-  await source.start((list) => {
-    latest = list;
-    notifyAttention(list);
-    win?.webContents.send('ua:summaries', list);
+  await source.start((snapshot) => {
+    latest = snapshot;
+    notifyAttention(snapshot.sessions);
+    win?.webContents.send('ua:summaries', snapshot);
   });
   if (dumpFile && !shotFile) {
     setTimeout(() => {
