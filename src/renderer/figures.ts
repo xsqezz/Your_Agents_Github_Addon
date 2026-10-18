@@ -23,23 +23,118 @@ export function poseFor(state: AgentState, category?: ToolCategory): Pose {
 interface Look {
   color: number;
   limb: number;
-  w: number;
-  h: number;
-  d: number;
-  radius: number;
-  eyes: 'rect' | 'screen' | 'round' | 'slash' | 'round-dark' | 'rect-light';
-  eyeColor: number;
-  legs: 4 | 2;
+  gradient?: boolean;
 }
 
+/** Every family shares one body (the vinyl-toy block); only colour and emblem differ. */
+const BODY = { w: 1.5, h: 1.0, d: 0.95, radius: 0.17 };
+
 export const LOOKS: Record<Family, Look> = {
-  claude: { color: 0xf26b1d, limb: 0xe85f12, w: 1.35, h: 0.95, d: 0.85, radius: 0.12, eyes: 'rect', eyeColor: 0x0b0b0d, legs: 4 },
-  gpt: { color: 0x202638, limb: 0x2c3348, w: 1.1, h: 1.15, d: 0.9, radius: 0.3, eyes: 'screen', eyeColor: 0x35e8ff, legs: 2 },
-  gemini: { color: 0x4f7dff, limb: 0x3f69e6, w: 1.2, h: 1.05, d: 0.95, radius: 0.45, eyes: 'round', eyeColor: 0xffffff, legs: 2 },
-  grok: { color: 0x2d323c, limb: 0x1e222a, w: 1.0, h: 1.2, d: 0.75, radius: 0.14, eyes: 'slash', eyeColor: 0xf4f7fb, legs: 2 },
-  mai: { color: 0x6fd3c0, limb: 0x58b8a6, w: 1.2, h: 1.0, d: 0.9, radius: 0.35, eyes: 'round-dark', eyeColor: 0x10302b, legs: 2 },
-  generic: { color: 0x8b95a3, limb: 0x727c8a, w: 1.15, h: 1.0, d: 0.85, radius: 0.2, eyes: 'rect-light', eyeColor: 0xeaf2ff, legs: 2 },
+  claude: { color: 0xef5a2b, limb: 0xe6511f },
+  gpt: { color: 0x1fb09c, limb: 0x19a08d },
+  gemini: { color: 0xffffff, limb: 0xffffff, gradient: true },
+  grok: { color: 0x31353d, limb: 0x2b2f36 },
+  mai: { color: 0xe9e8e4, limb: 0xe0dfdb },
+  generic: { color: 0x8e98a6, limb: 0x7f8998 },
 };
+
+const GRADIENT = [0x2f55f0, 0x2fbf6a, 0xffc61f, 0xff7a1c, 0xe5303a].map((c) => new THREE.Color(c));
+const GRADIENT_AT = [0, 0.3, 0.55, 0.78, 1];
+
+function gradientAt(t: number): THREE.Color {
+  const x = Math.min(1, Math.max(0, t));
+  for (let i = 1; i < GRADIENT_AT.length; i++) {
+    if (x <= GRADIENT_AT[i]) {
+      const k = (x - GRADIENT_AT[i - 1]) / (GRADIENT_AT[i] - GRADIENT_AT[i - 1]);
+      return GRADIENT[i - 1].clone().lerp(GRADIENT[i], k);
+    }
+  }
+  return GRADIENT[GRADIENT.length - 1].clone();
+}
+
+function paintGradient(geo: THREE.BufferGeometry, x0: number, x1: number): void {
+  const pos = geo.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const c = gradientAt((pos.getX(i) - x0) / (x1 - x0));
+    colors.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+const emblems = new Map<Family, THREE.CanvasTexture>();
+function emblemTexture(family: Family): THREE.CanvasTexture {
+  let tex = emblems.get(family);
+  if (tex) return tex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#ffffff';
+  g.strokeStyle = '#ffffff';
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  if (family === 'claude') {
+    const lens = [98, 70, 92, 62, 100, 68, 90, 74, 96, 64, 88, 70];
+    g.translate(128, 128);
+    lens.forEach((len, i) => {
+      const a = (i / lens.length) * Math.PI * 2 + 0.1;
+      g.beginPath();
+      g.moveTo(Math.cos(a - 0.27) * 20, Math.sin(a - 0.27) * 20);
+      g.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+      g.lineTo(Math.cos(a + 0.27) * 20, Math.sin(a + 0.27) * 20);
+      g.fill();
+    });
+  } else if (family === 'gpt') {
+    g.translate(128, 128);
+    g.lineWidth = 13;
+    for (let i = 0; i < 6; i++) {
+      g.save();
+      g.rotate((i * Math.PI) / 3);
+      g.beginPath();
+      g.ellipse(0, -42, 30, 54, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.restore();
+    }
+  } else if (family === 'gemini') {
+    g.beginPath();
+    g.moveTo(128, 18);
+    g.quadraticCurveTo(138, 118, 238, 128);
+    g.quadraticCurveTo(138, 138, 128, 238);
+    g.quadraticCurveTo(118, 138, 18, 128);
+    g.quadraticCurveTo(118, 118, 128, 18);
+    g.fill();
+  } else if (family === 'grok') {
+    g.lineWidth = 17;
+    g.beginPath();
+    g.arc(128, 104, 56, 0, Math.PI * 2);
+    g.stroke();
+    g.lineWidth = 19;
+    g.beginPath();
+    g.moveTo(82, 150);
+    g.lineTo(174, 58);
+    g.stroke();
+    g.font = '800 54px "Segoe UI",system-ui,sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('GROK', 128, 212);
+  } else if (family === 'mai') {
+    const squares: [number, number, string][] = [[34, 34, '#f25022'], [134, 34, '#7fba00'], [34, 134, '#00a4ef'], [134, 134, '#ffb900']];
+    for (const [x, y, col] of squares) {
+      g.fillStyle = col;
+      g.fillRect(x, y, 88, 88);
+    }
+  } else {
+    g.lineWidth = 20;
+    g.beginPath();
+    g.arc(128, 128, 64, 0, Math.PI * 2);
+    g.stroke();
+  }
+  tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  emblems.set(family, tex);
+  return tex;
+}
 
 interface Target {
   x: number; y: number; rx: number; ry: number; rz: number; sy: number; sxz: number;
@@ -66,12 +161,13 @@ export class Figure {
   readonly root = new THREE.Group();
   readonly family: Family;
   readonly tier: number;
-  private look: Look;
+  private look: Look & typeof BODY;
   private body = new THREE.Group();
   private bodyMat: THREE.MeshPhysicalMaterial;
   private baseColor: THREE.Color;
   private eyes = new THREE.Group();
   private eyeZ = 0;
+  private eyeY = 0;
   private eyeMeshes: THREE.Object3D[] = [];
   private eyeX = new THREE.Group();
   private armL = new THREE.Group();
@@ -93,9 +189,9 @@ export class Figure {
     this.family = family;
     this.tier = tier;
     this.reduced = reducedMotion;
-    this.look = LOOKS[family];
+    this.look = { ...BODY, ...LOOKS[family] };
     this.baseColor = new THREE.Color(this.look.color);
-    this.bodyMat = mat(this.look.color);
+    this.bodyMat = mat(this.look.color, { roughness: 0.62, clearcoat: 0.12, clearcoatRoughness: 0.5, vertexColors: !!this.look.gradient });
     this.disposables.push(this.bodyMat);
     this.build();
     const s = scale * (tier === 1 ? 0.9 : tier === 3 ? 1.08 : 1);
@@ -137,7 +233,7 @@ export class Figure {
     this.armR.rotation.set(this.cur.arx, 0, this.cur.arz);
 
     const blink = !this.reduced && this.pose !== 'sleep' && (t * 0.23 + this.phase) % 1 < 0.025 ? 0.1 : 1;
-    this.eyes.position.set(this.cur.dx, this.cur.dy, this.eyeZ);
+    this.eyes.position.set(this.cur.dx, this.eyeY + this.cur.dy, this.eyeZ);
     this.eyes.scale.set(this.cur.wide, Math.max(0.08, this.cur.open * this.cur.wide * blink), 1);
 
     this.animateProps(tt, dt);
@@ -233,129 +329,92 @@ export class Figure {
 
   private build(): void {
     const L = this.look;
-    const limbMat = mat(L.limb);
-    this.disposables.push(limbMat);
+    const gradient = !!L.gradient;
+    const limbMat = mat(L.limb, { roughness: 0.62, clearcoat: 0.12, clearcoatRoughness: 0.5, vertexColors: false });
+    const limbL = gradient ? mat(0x2f55f0, { roughness: 0.62, clearcoat: 0.12 }) : limbMat;
+    const limbR = gradient ? mat(0xe5303a, { roughness: 0.62, clearcoat: 0.12 }) : limbMat;
+    this.disposables.push(limbMat, limbL, limbR);
 
-    const torso = rbox(L.w, L.h, L.d, L.radius, this.bodyMat);
+    const torsoGeo = new RoundedBoxGeometry(L.w, L.h, L.d, 6, L.radius);
+    if (gradient) paintGradient(torsoGeo, -L.w / 2, L.w / 2);
+    const torso = new THREE.Mesh(torsoGeo, this.bodyMat);
+    torso.castShadow = true;
     torso.position.y = L.h / 2;
     this.body.add(torso);
 
     this.buildFace();
 
+    // Stubby side nubs.
     const armY = L.h * 0.42;
     for (const [pivot, side] of [[this.armL, -1], [this.armR, 1]] as const) {
-      pivot.position.set(side * (L.w / 2 - 0.02), armY, 0.05);
-      const arm = rbox(0.28, 0.22, 0.3, 0.07, limbMat);
-      arm.position.set(side * 0.13, 0, 0);
+      pivot.position.set(side * (L.w / 2 - 0.04), armY, 0.0);
+      const arm = rbox(0.36, 0.3, 0.36, 0.13, side < 0 ? limbL : limbR);
+      arm.position.set(side * 0.15, 0, 0);
       pivot.add(arm);
       this.body.add(pivot);
     }
 
-    const xs = L.legs === 4 ? [-0.5, -0.27, 0.27, 0.5].map((x) => x * (L.w / 1.35)) : [-0.28, 0.28];
+    // Four short legs in two pairs; seated, they point forward.
+    const xs = [-0.6, -0.3, 0.3, 0.6];
     for (const x of xs) {
-      const leg = rbox(L.legs === 4 ? 0.15 : 0.3, 0.17, 0.42, 0.06, limbMat);
+      const leg = rbox(0.23, 0.26, 0.34, 0.1, x < 0 ? limbL : limbR);
       leg.position.set(x, -0.04, L.d / 2 + 0.12);
       this.body.add(leg);
     }
 
-    this.buildAccessory(limbMat);
+    this.buildAccessory();
     this.buildProps();
   }
 
   private buildFace(): void {
     const L = this.look;
-    const front = L.d / 2 + 0.03;
-    this.eyeZ = front;
-    this.eyes.position.z = front;
-    const eyeMat = new THREE.MeshBasicMaterial({ color: L.eyeColor });
-    this.disposables.push(eyeMat);
+    const front = L.d / 2 + 0.02;
     const y = L.h * 0.64;
-    const sx = L.w * 0.22;
+    const ex = L.w * 0.31;
+    this.eyeZ = front;
+    this.eyeY = y;
+    this.eyes.position.set(0, y, front);
 
-    if (L.eyes === 'screen') {
-      const bezel = rbox(L.w * 0.9, L.h * 0.74, 0.05, 0.12, mat(0x6b7491, { metalness: 0.5, roughness: 0.35 }));
-      bezel.position.set(0, y, front - 0.03);
-      const screen = rbox(L.w * 0.8, L.h * 0.62, 0.05, 0.1, new THREE.MeshBasicMaterial({ color: 0x080b12 }));
-      screen.position.set(0, y, front - 0.005);
-      this.body.add(bezel, screen);
-    }
-
-    const make = (x: number, ry: number, rz = 0): THREE.Object3D => {
-      let m: THREE.Mesh;
-      if (L.eyes === 'rect' || L.eyes === 'rect-light') m = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.03), eyeMat);
-      else if (L.eyes === 'screen') m = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.26, 0.03, 3, 0.07), eyeMat);
-      else if (L.eyes === 'slash') m = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.09, 0.03), eyeMat);
-      else m = new THREE.Mesh(new THREE.CircleGeometry(L.eyes === 'round' ? 0.17 : 0.13, 20), eyeMat);
-      m.position.set(x, ry, 0);
-      m.rotation.z = rz;
-      this.eyes.add(m);
-      this.eyeMeshes.push(m);
-      return m;
-    };
-    if (L.eyes === 'slash') {
-      make(-0.2, y + 0.03, -0.3);
-      make(0.2, y - 0.03, -0.3);
-    } else {
-      make(-sx, y);
-      make(sx, y);
-    }
-    if (L.eyes === 'round') {
-      const pupil = new THREE.MeshBasicMaterial({ color: 0x151a2b });
-      this.disposables.push(pupil);
-      for (const e of this.eyeMeshes) {
-        const p = new THREE.Mesh(new THREE.CircleGeometry(0.08, 16), pupil);
-        p.position.set(0, -0.01, 0.01);
-        e.add(p);
-      }
+    const eyeMat = new THREE.MeshPhysicalMaterial({ color: 0x050506, roughness: 0.12, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 });
+    this.disposables.push(eyeMat);
+    for (const x of [-ex, ex]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), eyeMat);
+      eye.scale.set(0.085, 0.14, 0.04);
+      eye.position.set(x, 0, 0);
+      this.eyes.add(eye);
+      this.eyeMeshes.push(eye);
     }
     this.body.add(this.eyes);
 
-    const xMat = new THREE.MeshBasicMaterial({ color: 0xff6b7d });
+    // X eyes for the error state.
+    const xMat = new THREE.MeshBasicMaterial({ color: 0x111114 });
     this.disposables.push(xMat);
-    this.eyeX.position.z = front + 0.005;
-    for (const ex of L.eyes === 'slash' ? [-0.2, 0.2] : [-sx, sx]) {
+    this.eyeX.position.set(0, y, front + 0.01);
+    for (const x of [-ex, ex]) {
       for (const rot of [Math.PI / 4, -Math.PI / 4]) {
         const bar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.03), xMat);
-        bar.position.set(ex, y, 0);
+        bar.position.set(x, 0, 0);
         bar.rotation.z = rot;
         this.eyeX.add(bar);
       }
     }
     this.eyeX.visible = false;
     this.body.add(this.eyeX);
+
+    // Raised emblem on the chest, and again on the back so the family shows when the agent faces its screens.
+    const emblemMat = new THREE.MeshStandardMaterial({ map: emblemTexture(this.family), transparent: true, alphaTest: 0.35, roughness: 0.55, metalness: 0 });
+    this.disposables.push(emblemMat);
+    const size = this.family === 'grok' ? 0.86 : 0.78;
+    for (const dir of [1, -1]) {
+      const emblem = new THREE.Mesh(new THREE.PlaneGeometry(size, size), emblemMat);
+      emblem.position.set(0, L.h * 0.48, dir * (L.d / 2 + 0.006));
+      if (dir < 0) emblem.rotation.y = Math.PI;
+      this.body.add(emblem);
+    }
   }
 
-  private buildAccessory(limbMat: THREE.Material): void {
+  private buildAccessory(): void {
     const L = this.look;
-    if (this.family === 'gpt') {
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.05, 10, 32, Math.PI), mat(0x5b3fd0));
-      band.scale.y = 0.4;
-      band.position.set(0, L.h * 0.78, 0);
-      this.body.add(band);
-      for (const side of [-1, 1]) {
-        const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 20), mat(0x5b3fd0));
-        cup.rotation.z = Math.PI / 2;
-        cup.position.set(side * 0.62, L.h * 0.78, 0);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 8, 24), new THREE.MeshBasicMaterial({ color: 0x35e8ff }));
-        ring.rotation.y = Math.PI / 2;
-        ring.position.set(side * 0.7, L.h * 0.78, 0);
-        this.body.add(cup, ring);
-      }
-    } else if (this.family === 'gemini') {
-      for (const side of [-1, 1]) {
-        const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 14), mat(0xa77bff));
-        lobe.scale.y = 0.85;
-        lobe.position.set(side * L.w * 0.24, L.h + 0.0, 0);
-        lobe.castShadow = true;
-        this.body.add(lobe);
-      }
-    } else if (this.family === 'grok') {
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 8), limbMat);
-      mast.position.set(L.w * 0.28, L.h + 0.2, -0.05);
-      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), new THREE.MeshBasicMaterial({ color: 0xff6a3d }));
-      tip.position.set(L.w * 0.28, L.h + 0.42, -0.05);
-      this.body.add(mast, tip);
-    }
     if (this.tier === 3) {
       const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), new THREE.MeshBasicMaterial({ color: 0xffd45e }));
       star.position.set(0, L.h + 0.32, 0);
