@@ -7,7 +7,7 @@ import type { SessionSummary } from '../core/types.ts';
 import { Figure, poseFor } from './figures.ts';
 import { Hall } from './hall.ts';
 import { capacityFor, COLS, deskPos, hallSize, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
-import { drawActivity, drawFocus, Monitor } from './screens.ts';
+import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, STRIP_H } from './screens.ts';
 import { isOccupied, NEEDS_YOU, STATE_COLOR, STATE_LABEL, stateText } from './theme.ts';
 
 const MINI_SPOTS: [number, number][] = [[-1.75, 0.55], [1.75, 0.55], [-1.35, 1.5]];
@@ -90,7 +90,7 @@ class Desk {
     this.el = { btn: q('.tag'), name: q('.tag-name'), state: q('.tag-state b'), dot: q('.dot'), act: q('.tag-act'), ctx: q('.ctx i'), sub: q('.tag-sub') };
     this.label = new CSS2DObject(wrap);
     this.label.center.set(0.5, 1);
-    this.label.position.set(0, 3.45, -0.6);
+    this.label.position.set(0, 4.35, -1.2);
     this.label.visible = false;
     this.group.add(this.label);
     this.holder.visible = false;
@@ -136,13 +136,24 @@ class Desk {
     mouse.position.set(0.8, 0.83, -0.66);
     g.add(keyboard, mouse);
 
-    // Two large monitors that face the room (and the camera); the agent works with its back to us.
-    for (const side of [-1, 1] as const) {
-      const m = new Monitor(side);
-      m.group.position.set(side * 1.0, 0.815, -1.2);
-      g.add(m.group);
-      this.monitors.push(m);
-    }
+    // One big monitor straight ahead with a wide second one stacked on top. They face the room (and the
+    // camera); the agent works with its back to us. Order in `monitors`: [top strip, main].
+    const frameMat = stdMat(0x14171c, 0.45, 0.5);
+    const rig = new THREE.Group();
+    rig.position.set(0, 0.95, -1.2);
+    rig.rotation.x = -0.28;
+    const main = new Monitor(3.8, 2.05, SCREEN_W, SCREEN_H);
+    main.group.position.y = 2.05 / 2;
+    const strip = new Monitor(3.8, 0.9, SCREEN_W, STRIP_H);
+    strip.group.position.y = 2.05 + 0.03 + 0.45;
+    rig.add(main.group, strip.group);
+    g.add(rig);
+    this.monitors.push(strip, main);
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.08), frameMat);
+    neck.position.set(0, 0.86, -1.25);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.025, 0.46), frameMat);
+    foot.position.set(0, 0.8325, -1.12);
+    g.add(neck, foot);
 
     const chairMat = stdMat(0x8791a0, 0.85, 0.02);
     const chrome = stdMat(0xb8bec6, 0.25, 0.8);
@@ -172,8 +183,8 @@ class Desk {
     mug.castShadow = true;
     g.add(mug);
 
-    const pick = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.0, 4.0), new THREE.MeshBasicMaterial({ visible: false }));
-    pick.position.y = 1.4;
+    const pick = new THREE.Mesh(new THREE.BoxGeometry(4.2, 4.0, 4.0), new THREE.MeshBasicMaterial({ visible: false }));
+    pick.position.y = 2.0;
     pick.userData.deskIndex = this.index;
     g.add(pick);
   }
@@ -300,17 +311,17 @@ class Desk {
   }
 
   private drawScreens(s: SessionSummary | null, t: number): void {
-    const [left, right] = this.monitors;
+    const [strip, main] = this.monitors;
     if (!s) {
-      left.render(null, 'off', 0x2a2f36);
-      right.render(null, 'off', 0x2a2f36);
+      strip.render(null, 'off', 0x2a2f36);
+      main.render(null, 'off', 0x2a2f36);
       return;
     }
     const phase = this.reduced ? 0 : Math.floor(t * 2.4);
     const key = `${this.screenSig}|${phase}`;
     const led = this.color.getHex();
-    left.render((ctx) => drawActivity(ctx, s, phase), key, led);
-    right.render((ctx) => drawFocus(ctx, s, phase, Date.now()), key, led);
+    strip.render((ctx) => drawActivity(ctx, s, phase), key, led);
+    main.render((ctx) => drawFocus(ctx, s, phase, Date.now()), key, led);
   }
 
   dispose(): void {
@@ -500,10 +511,10 @@ export class OfficeScene {
     const rows = Math.max(1, this.rows);
     const half = Math.tan((this.camera.fov * Math.PI) / 360);
     const aspect = this.width / this.height;
-    const pitch = (49 * Math.PI) / 180;
+    const pitch = (53 * Math.PI) / 180;
     const usableW = Math.max(300, this.width - this.panelPx);
     const usableH = Math.max(300, this.height - 120);
-    const needH = rows * SPACING_Z * Math.sin(pitch) + 8.2;
+    const needH = rows * SPACING_Z * Math.sin(pitch) + 9.4;
     const needW = COLS * SPACING_X + 7;
     const distV = needH / 2 / (half * (usableH / this.height));
     const distH = needW / 2 / (half * aspect * (usableW / this.width));
@@ -516,7 +527,7 @@ export class OfficeScene {
     if (idx === undefined) return;
     const p = this.desks[idx].group.position;
     this.userMoved = true;
-    this.go(new THREE.Vector3(p.x, p.y + 6.6, p.z + 4.6), new THREE.Vector3(p.x, p.y + 1.7, p.z - 1.1), true);
+    this.go(new THREE.Vector3(p.x, p.y + 7.2, p.z + 4.8), new THREE.Vector3(p.x, p.y + 2.2, p.z - 1.2), true);
   }
 
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {

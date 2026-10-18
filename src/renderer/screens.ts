@@ -3,8 +3,9 @@ import type { FeedItem, SessionSummary, ToolCategory } from '../core/types.ts';
 import { FAMILY_LABEL } from '../core/family.ts';
 import { STATE_COLOR, stateText } from './theme.ts';
 
-export const SCREEN_W = 640;
+export const SCREEN_W = 760;
 export const SCREEN_H = 400;
+export const STRIP_H = 164;
 
 const MONO = '"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace';
 const UI = '"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
@@ -83,7 +84,7 @@ function header(ctx: CanvasRenderingContext2D, title: string, right: string, col
 
 export function drawOff(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = '#05070a';
-  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 }
 
 function statusGlyph(it: FeedItem, phase: number): [string, string] {
@@ -106,20 +107,21 @@ function feedStyle(it: FeedItem): { icon: string; color: string; title: string }
   return { icon: '·', color: C.dim, title: it.title };
 }
 
-/** Left monitor: the agent's recent activity, newest at the bottom. */
+/** Top monitor (wide strip): the agent's recent activity, newest at the bottom. */
 export function drawActivity(ctx: CanvasRenderingContext2D, s: SessionSummary, phase: number): void {
+  const H = ctx.canvas.height;
   ctx.fillStyle = C.bg;
-  ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.fillRect(0, 0, SCREEN_W, H);
   header(ctx, 'Activity', `${FAMILY_LABEL[s.family]} · ${s.model || '?'}`, STATE_COLOR[s.state]);
   ctx.textBaseline = 'middle';
-  const items = s.feed.slice(-11);
+  const items = s.feed.slice(-4);
   if (!items.length) {
     ctx.font = `500 22px ${UI}`;
     ctx.fillStyle = C.dim;
     ctx.fillText('no activity yet', PAD, 90);
     return;
   }
-  let y = SCREEN_H - 20 - (items.length - 1) * LH;
+  let y = H - 17 - (items.length - 1) * LH;
   for (const it of items) {
     const st = feedStyle(it);
     const [glyph, gcol] = statusGlyph(it, phase);
@@ -321,7 +323,7 @@ export function drawFocus(ctx: CanvasRenderingContext2D, s: SessionSummary, phas
   }
 }
 
-/** One physical monitor: bezel, stand and a live canvas for the screen. */
+/** One physical monitor: bezel plus a live canvas for the screen. Centered on its own origin. */
 export class Monitor {
   readonly group = new THREE.Group();
   private canvas = document.createElement('canvas');
@@ -331,9 +333,10 @@ export class Monitor {
   private led: THREE.MeshBasicMaterial;
   private lastKey = '';
 
-  constructor(side: -1 | 1) {
-    this.canvas.width = SCREEN_W;
-    this.canvas.height = SCREEN_H;
+  /** `w` x `h` is the outer size in world units; `texW` x `texH` the screen resolution. */
+  constructor(w: number, h: number, texW: number, texH: number) {
+    this.canvas.width = texW;
+    this.canvas.height = texH;
     this.ctx = this.canvas.getContext('2d')!;
     drawOff(this.ctx);
     this.texture = new THREE.CanvasTexture(this.canvas);
@@ -343,26 +346,13 @@ export class Monitor {
     this.led = new THREE.MeshBasicMaterial({ color: 0x2a2f36 });
 
     const frame = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.45, metalness: 0.5 });
-    const W = 1.92;
-    const H = 1.2;
-    const bezel = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.06), frame);
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.07), frame);
     bezel.castShadow = true;
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.1, (W - 0.1) * (SCREEN_H / SCREEN_W)), this.screenMat);
-    screen.position.z = 0.032;
-    const ledDot = new THREE.Mesh(new THREE.CircleGeometry(0.016, 10), this.led);
-    ledDot.position.set(W / 2 - 0.08, -H / 2 + 0.03, 0.033);
-    const tilt = new THREE.Group();
-    tilt.add(bezel, screen, ledDot);
-    tilt.position.y = 0.92;
-    this.group.add(tilt);
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.05), frame);
-    neck.position.set(0, 0.21, -0.05);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.025, 0.38), frame);
-    foot.position.set(0, 0.0125, 0.02);
-    this.group.add(neck, foot);
-    this.group.rotation.order = 'YXZ';
-    this.group.rotation.y = side * -0.1;
-    tilt.rotation.x = -0.3;
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.1, h - 0.1), this.screenMat);
+    screen.position.z = 0.037;
+    const ledDot = new THREE.Mesh(new THREE.CircleGeometry(0.018, 10), this.led);
+    ledDot.position.set(w / 2 - 0.1, -h / 2 + 0.035, 0.038);
+    this.group.add(bezel, screen, ledDot);
   }
 
   /** Redraws only when the content (or the blink phase while animating) changed. */

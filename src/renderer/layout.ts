@@ -1,7 +1,7 @@
 export const COLS = 5;
 export const MIN_DESKS = 10;
 export const SPACING_X = 4.9;
-export const SPACING_Z = 6.0;
+export const SPACING_Z = 7.3;
 
 /** Desks always come in full rows of five, never fewer than ten. */
 export function capacityFor(sessions: number, highestIndex = -1): number {
