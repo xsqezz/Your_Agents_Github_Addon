@@ -92,6 +92,21 @@ export class Hall {
   private sign: THREE.Mesh | null = null;
   private title = '';
   private rows = 1;
+  private cut: { g: THREE.Object3D; outside: (camera: THREE.Vector3) => boolean; open: number }[] = [];
+
+  private cutaway(g: THREE.Object3D, outside: (camera: THREE.Vector3) => boolean): void {
+    this.cut.push({ g, outside, open: 0 });
+  }
+
+  /** Lowers every wall the camera is outside of, and raises it again once the camera is back in the room. */
+  update(camera: THREE.Vector3, dt: number, instant = false): void {
+    const k = instant ? 1 : 1 - Math.exp(-dt * 7);
+    for (const c of this.cut) {
+      c.open += ((c.outside(camera) ? 1 : 0) - c.open) * k;
+      c.g.scale.y = 1 - c.open * 0.86;
+      c.g.visible = c.g.scale.y > 0.001;
+    }
+  }
 
   build(rows: number): void {
     this.clear();
@@ -165,13 +180,15 @@ export class Hall {
       g.add(glass);
       return g;
     };
-    const place = (g: THREE.Group, x: number, z: number, rotY: number): void => {
+    const place = (g: THREE.Group, x: number, z: number, rotY: number): THREE.Group => {
       g.position.set(x, 0, z);
       g.rotation.y = rotY;
       add(g, false);
+      return g;
     };
-    place(glazed(W + 0.6, W - 1.2), 0, zBack, 0);
-    place(glazed(D, D - 1.2), W / 2, 0, -Math.PI / 2);
+    // Tall walls drop to a low sill while the camera is outside them, so no wall ever stands between you and an agent.
+    this.cutaway(place(glazed(W + 0.6, W - 1.2), 0, zBack, 0), (p) => p.z < zBack);
+    this.cutaway(place(glazed(D, D - 1.2), W / 2, 0, -Math.PI / 2), (p) => p.x > W / 2);
 
     // Front wall: a low parapet, so the room reads as closed without hiding the desks from the camera.
     const parapet = new THREE.Group();
@@ -180,7 +197,18 @@ export class Hall {
     place(parapet, 0, zFront, Math.PI);
 
     // Left wall: warm oak slats over a dark felt backing, with LED strips.
-    add(box(0.3, wallH, D, std(0x1c1c1c, 1), -W / 2 - 0.15, wallH / 2, 0), false);
+    const oakWall = new THREE.Group();
+    const addTo = (target: THREE.Group, mesh: THREE.Object3D, shadow = true): void => {
+      mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = shadow;
+          m.receiveShadow = true;
+        }
+      });
+      target.add(mesh);
+    };
+    addTo(oakWall, box(0.3, wallH, D, std(0x1c1c1c, 1), -W / 2 - 0.15, wallH / 2, 0), false);
     const slatCount = Math.floor(D / 0.26);
     const slats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, wallH - 0.5, 0.15), oak, slatCount);
     const m4 = new THREE.Matrix4();
@@ -190,9 +218,11 @@ export class Hall {
     }
     slats.castShadow = true;
     slats.receiveShadow = true;
-    root.add(slats);
-    root.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, 0.95, 0));
-    root.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, wallH - 0.4, 0));
+    oakWall.add(slats);
+    oakWall.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, 0.95, 0));
+    oakWall.add(box(0.05, 0.05, D, basic(0xffffff), -W / 2 + 0.17, wallH - 0.4, 0));
+    root.add(oakWall);
+    this.cutaway(oakWall, (p) => p.x < -W / 2);
 
     // Low credenza along the oak wall.
     const credZ = zBack + 5.2;
@@ -294,6 +324,7 @@ export class Hall {
   }
 
   private clear(): void {
+    this.cut = [];
     if (!this.built) return;
     this.group.remove(this.built);
     this.built.traverse((o) => {

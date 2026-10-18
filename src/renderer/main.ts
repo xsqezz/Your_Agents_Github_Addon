@@ -523,6 +523,12 @@ async function start(): Promise<void> {
   announce(store.all);
   render();
   if (params.get('launch') === '1') setTimeout(openLauncher, 800);
+  const nums = (key: string): [number, number, number] | null => {
+    const p = params.get(key)?.split(',').map(Number);
+    return p && p.length === 3 && p.every(Number.isFinite) ? (p as [number, number, number]) : null;
+  };
+  const cam = nums('cam');
+  if (cam) scene.setCamera(cam, nums('look') ?? [0, 1.2, 0]);
   const sel = params.get('select');
   if (sel !== null) {
     const vis = visible();

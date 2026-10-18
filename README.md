@@ -54,7 +54,7 @@ Every desk has **two monitors** that update live � an ultrawide screen straigh
 - **Left — Activity:** the agent's recent prompts, tool calls and results, newest at the bottom, with running / ok / failed marks.
 - **Right — Focus:** what it is doing right now — the terminal command and its output, the file it is reading, the patch it is writing (green/red lines), web results, the sub-agents it started, the question it asks you, the permission it waits for, or its latest message while it thinks.
 
-A working agent sits with its back to you, facing its monitors. When it needs you (question, permission, error) or has finished, it swivels round to face the room.
+A working agent sits with its back to you, facing its monitors. When it needs you (question, permission, error) or has finished, it swivels round to face the room. Orbit the camera freely: a tall wall drops to a low sill while the camera is outside it, so no wall ever hides an agent (`--cam x,y,z --look x,y,z` places the camera exactly, for screenshots).
 
 | State | Figure |
 |---|---|

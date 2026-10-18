@@ -544,6 +544,12 @@ export class OfficeScene {
     this.go(new THREE.Vector3(p.x, p.y + 8.4, p.z + dir * 4.0), new THREE.Vector3(p.x, p.y + 2.2, p.z - dir * 1.2), true);
   }
 
+  /** Puts the camera somewhere exact (used by --cam/--look to check views from any side). */
+  setCamera(pos: [number, number, number], target: [number, number, number]): void {
+    this.userMoved = true;
+    this.go(new THREE.Vector3(...pos), new THREE.Vector3(...target), false);
+  }
+
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {
     if (!animate || this.reduced) {
       this.camera.position.copy(pos);
@@ -586,6 +592,7 @@ export class OfficeScene {
       if (k >= 1) this.tween = null;
     }
     this.controls.update();
+    this.hall.update(this.camera.position, dt, this.reduced);
     for (const d of this.desks) d.update(this.time, dt);
     this.renderer.render(this.scene, this.camera);
   };

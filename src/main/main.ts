@@ -124,6 +124,10 @@ function createWindow(): void {
   if (view) query.view = view;
   const room = arg('room');
   if (room) query.room = room;
+  for (const k of ['cam', 'look']) {
+    const v = arg(k);
+    if (v) query[k] = v;
+  }
   if (has('launch')) query.launch = '1';
   void win.loadFile(path.join(__dirname, 'index.html'), { query });
 
