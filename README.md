@@ -4,7 +4,17 @@ A 3D hall for your GitHub Copilot agents. A closed modernist room (plaster walls
 
 **Version 0.2 can watch and control** the agents. It reads what the Copilot app and CLI already write under `~/.copilot`, and (once you install the bridge and switch **Control** on) sends messages, Stop, answers and permission decisions back. See [Controlling agents](#controlling-agents) and [docs/PLAN.md](docs/PLAN.md).
 
-## Run
+## Install
+
+Build the installer and run it:
+
+```powershell
+npm run dist          # out/installer/ur-agents-Setup-<version>.exe
+```
+
+The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_agents`, adds a **Desktop** shortcut and a Start Menu entry, and starts the app. Only one window runs at a time (starting it again just brings it forward). Uninstall from Windows Settings > Apps; that removes the shortcuts and the bridge extension from `~/.copilot/extensions`, and leaves your settings and audit log in `%LOCALAPPDATA%\ur-agents`. The installer is not code-signed, so Windows SmartScreen may ask you to confirm ("More info" > "Run anyway").
+
+## Run from source
 
 ```powershell
 npm install
@@ -13,13 +23,13 @@ npm start                               # live data from ~/.copilot
 npm run demo                            # 14 synthetic agents cycling through every state
 ```
 
-Build a Windows `.exe` (folder `out/ur-agents-win32-x64/ur-agents.exe`):
+Build only the unpacked app (`out/ur-agents-win32-x64/ur-agents.exe`):
 
 ```powershell
 npm run pack
 ```
 
-Other scripts: `npm test`, `npm run typecheck`.
+Other scripts: `npm test`, `npm run typecheck`, `npm run icon` (regenerates `build/icon.ico`).
 
 Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--room <id>`, `--launch` (open the New agent dialog), `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
 

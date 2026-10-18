@@ -71,7 +71,7 @@ const visibleEverywhere = (): SessionSummary[] => shown(store.all);
 const currentRoom = (): RoomInfo | undefined => store.rooms.find((r) => r.id === store.room);
 const selected = (): SessionSummary | undefined => store.all.find((s) => s.id === store.selectedId);
 const panelPx = (): number => (store.selectedId ? Math.min(440, Math.round(window.innerWidth * 0.46)) : 0);
-const roomsPx = (): number => (store.rooms.length > 1 ? 228 : 0);
+const roomsPx = (): number => (store.rooms.length > 1 ? $('rooms').offsetWidth + 12 : 0);
 
 /* ───────────── top bar ───────────── */
 

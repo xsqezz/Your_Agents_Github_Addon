@@ -11,13 +11,16 @@
     "demo": "node scripts/build.mjs && electron . --demo",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
-    "pack": "node scripts/build.mjs && node scripts/pack.mjs"
+    "pack": "node scripts/build.mjs && node scripts/pack.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "node scripts/build.mjs && node scripts/pack.mjs && node scripts/installer.mjs"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",
     "@types/node": "^24.0.0",
     "@types/three": "^0.186.0",
     "electron": "^44.9.0",
+    "electron-winstaller": "^5.4.4",
     "esbuild": "^0.28.2",
     "three": "^0.186.1",
     "typescript": "^5.9.0"
