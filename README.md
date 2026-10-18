@@ -21,17 +21,23 @@ npm run pack
 
 Other scripts: `npm test`, `npm run typecheck`.
 
-Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--room <id>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
+Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--control` (demo: start with Control on), `--copilot-home <dir>`, `--view 3d|list`, `--select <n>`, `--room <id>`, `--launch` (open the New agent dialog), `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
 
 ## Rooms
 
 There is one hall per **session folder** of the GitHub Copilot app — the projects in its Sessions sidebar, in the same order, plus **Chats**. Sessions that belong to no listed folder land in an **Other sessions** room. Every room has its own ten desks; the room name is painted on the floor.
 
-Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / `PageDown` (or `Alt+↑` / `Alt+↓`), or by selecting an agent that lives elsewhere (for example from a notification). A yellow badge on a room means agents there need you, a green one counts the agents working. Each room remembers which agent sits at which desk. The first room shown is the one you used last, otherwise the first with something going on. Only sessions active in the last three days are listed (up to 12 per room).
+Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / `PageDown` (or `Alt+↑` / `Alt+↓`), or by selecting an agent that lives elsewhere (for example from a notification). A yellow badge on a room means agents there need you, a green one counts the agents working. Each room remembers which agent sits at which desk. The first room shown is the one you used last, otherwise the first with something going on.
+
+**Every session of a folder keeps a desk**, however old: agents that are not running sit there asleep with their monitors dimmed (their last screen stays readable), working ones get desks first. A room shows up to twelve of its newest sessions; strays the app does not file under a folder appear in "Other sessions" for three days.
+
+## Starting a new agent
+
+Click a **free desk** (or press `N`, or use **New agent**) to start an agent in the current room's folder. Pick what it should do, the model (any id; common ones are suggested), reasoning effort, mode (normal, plan first, autopilot) and permissions, optionally a name. It runs the Copilot CLI one-shot (`copilot --prompt …`) in that folder, so it works until the task is done and then goes offline; open it in the GitHub Copilot app to continue. Permissions are `--allow-all-tools` (stays inside the folder) or, after an extra confirmation, `--allow-all`. Needs **Control** switched on, at most six started agents run at once, and the session is filed under its room through a small `launched.json` next to the bridge data.
 
 ## What you see
 
-A desk is **occupied** while its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled. **Idle** and **offline** agents leave it empty (their name tag stays so you can still click them). Desks are numbered and keep their session for as long as it is listed.
+A desk is **taken** by every session of the room. While its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled it is awake at its monitors; **idle** and **offline** agents sit there asleep, and only desks without a session stay empty. Desks are numbered and keep their session for as long as it is listed.
 
 Every desk has **two monitors** that update live � an ultrawide screen straight ahead and a narrower 16:9 one stacked above it, with a light bar between them:
 

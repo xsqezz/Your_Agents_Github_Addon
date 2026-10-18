@@ -194,6 +194,31 @@ body.has-panel #statusbar { right: calc(var(--panel-w) + 24px); }
 body.has-rooms #topbar { left: calc(var(--rooms-w) + 24px); }
 body.has-rooms #list-view { left: calc(var(--rooms-w) + 24px); }
 body.has-rooms #statusbar { left: calc(var(--rooms-w) + 24px); }
+
+/* ───────── new agent dialog ───────── */
+#launch { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); overflow: auto; }
+#launch::backdrop { background: rgba(0, 0, 0, 0.62); }
+#launch-form { display: grid; gap: 14px; padding: 20px 22px 18px; }
+#launch header { display: flex; align-items: baseline; gap: 10px; }
+#launch h2 { margin: 0; font-size: 18px; font-weight: 650; }
+#launch header p { margin: 0; color: var(--muted); font-size: 13px; }
+#launch header b { color: var(--text); font-weight: 600; }
+#launch .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+#launch .field { display: grid; gap: 5px; min-width: 0; }
+#launch .field > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+#launch .field i { font-style: normal; font-weight: 400; }
+#launch input, #launch select, #launch textarea { width: 100%; background: #0a0a0a; border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px 10px; color: var(--text); font: inherit; font-size: 13.5px; }
+#launch textarea { resize: vertical; min-height: 110px; max-height: 320px; line-height: 1.5; }
+#launch input:disabled, #launch select:disabled, #launch textarea:disabled { opacity: 0.5; }
+#launch .notice { padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#launch .notice p { margin: 0; font-size: 13px; color: var(--text); }
+#launch .hint { margin: 0; font-size: 12px; color: var(--muted); }
+#launch .error { margin: 0; min-height: 0; font-size: 13px; color: #ff7b8b; }
+#launch .error:empty { display: none; }
+#launch footer { display: flex; justify-content: flex-end; gap: 10px; }
+#launch kbd { margin-left: 8px; font: 11px var(--mono); opacity: 0.6; }
+#toast { position: fixed; z-index: 20; left: 50%; bottom: 52px; transform: translateX(-50%); max-width: min(560px, 90vw); padding: 10px 16px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 12px; font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+#toast[data-error="1"] { border-color: #5a2a31; color: #ff7b8b; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #3ddc97; box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.18); }
 
 @media (prefers-reduced-motion: reduce) {

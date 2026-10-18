@@ -41,6 +41,7 @@ function numberTexture(n: number): THREE.CanvasTexture {
 
 interface Handlers {
   onSelect: (id: string | null) => void;
+  onEmptyDesk?: () => void;
 }
 
 /** One fixed desk. A session claims it; the agent sits down while it works and leaves when it is idle or offline. */
@@ -223,6 +224,7 @@ class Desk {
     if (!s) {
       this.hover = false;
       this.selected = false;
+      this.color.set('#ffffff');
       this.syncMinis();
       return;
     }
@@ -245,7 +247,7 @@ class Desk {
   /** Jump straight to the resting pose (used when switching rooms). */
   snap(): void {
     const s = this.summary;
-    const sitting = !!s && isOccupied(s.state);
+    const sitting = !!s;
     const faceRoom = !!s && (NEEDS_YOU.includes(s.state) || s.state === 'done');
     this.occ = sitting ? 1 : 0;
     this.tuck = sitting ? 0 : 1;
@@ -254,7 +256,8 @@ class Desk {
 
   update(t: number, dt: number): void {
     const s = this.summary;
-    const sitting = !!s && isOccupied(s.state);
+    // Every session of the room keeps its desk: it sits there asleep when it is not running.
+    const sitting = !!s;
     const faceRoom = !!s && (NEEDS_YOU.includes(s.state) || s.state === 'done');
     const k = this.reduced ? 1 : 1 - Math.exp(-dt * 6);
     this.occ += ((sitting ? 1 : 0) - this.occ) * k;
@@ -268,13 +271,13 @@ class Desk {
     this.chair.rotation.y = this.swivel + this.tuck * 0.5;
 
     const attention = !!s && NEEDS_YOU.includes(s.state);
-    let amt = !s ? 0 : s.state === 'offline' ? 0.12 : s.state === 'idle' ? 0.3 : s.state === 'stalled' ? 0.4 : 1;
+    let amt = !s ? (this.hover ? 0.45 : 0) : s.state === 'offline' ? 0.12 : s.state === 'idle' ? 0.3 : s.state === 'stalled' ? 0.4 : 1;
     if (attention && !this.reduced) amt *= 0.7 + 0.3 * Math.sin(t * 5);
     if ((this.hover || this.selected) && s) amt = 1;
     this.glow.copy(NEUTRAL).lerp(this.color, amt);
     this.glowMat.color.copy(this.glow);
     this.rugMat.emissive.copy(this.color);
-    this.rugMat.emissiveIntensity = s ? (this.hover || this.selected ? 0.12 : 0.03) : 0;
+    this.rugMat.emissiveIntensity = s ? (this.hover || this.selected ? 0.12 : 0.03) : this.hover ? 0.07 : 0;
     this.shadeMat.color.set(sitting ? 0xffffff : 0x3a3a3a);
 
     this.drawScreens(sitting ? s : null, t);
@@ -293,8 +296,19 @@ class Desk {
     const phase = this.reduced ? 0 : Math.floor(t * 2.4);
     const key = `${this.screenSig}|${phase}`;
     const led = this.color.getHex();
-    top.render((ctx) => drawActivity(ctx, s, phase), key, led);
-    main.render((ctx) => drawFocus(ctx, s, phase, Date.now()), key, led);
+    // Agents that are not running keep their last screen, dimmed, like a monitor on standby.
+    const dim = s.state === 'offline' ? 0.6 : s.state === 'idle' ? 0.25 : 0;
+    const paint = (draw: (ctx: CanvasRenderingContext2D) => void) => (ctx: CanvasRenderingContext2D): void => {
+      draw(ctx);
+      if (dim) {
+        ctx.save();
+        ctx.fillStyle = `rgba(0,0,0,${dim})`;
+        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.restore();
+      }
+    };
+    top.render(paint((ctx) => drawActivity(ctx, s, phase)), key, led);
+    main.render(paint((ctx) => drawFocus(ctx, s, phase, Date.now())), key, led);
   }
 
   dispose(): void {
@@ -382,11 +396,13 @@ export class OfficeScene {
       const idx = this.pick(e);
       const id = idx >= 0 ? this.desks[idx].summary?.id : undefined;
       if (id) this.handlers.onSelect(id);
-      else if (this.selectedId) this.handlers.onSelect(null);
+      else if (idx >= 0) {
+        if (this.selectedId) this.handlers.onSelect(null);
+        this.handlers.onEmptyDesk?.();
+      } else if (this.selectedId) this.handlers.onSelect(null);
     });
     dom.addEventListener('pointermove', (e) => {
-      const idx = this.pick(e);
-      const hit = idx >= 0 && this.desks[idx].summary ? idx : -1;
+      const hit = this.pick(e);
       if (hit !== this.hoverDesk) {
         this.hoverDesk = hit;
         dom.style.cursor = hit >= 0 ? 'pointer' : 'grab';

@@ -32,7 +32,7 @@ const ALLOWED: Record<string, string[]> = {
   ],
   workspaces: ['id', 'session_id', 'branch', 'name', 'project_id'],
   workspace_session_aliases: ['session_id', 'workspace_id'],
-  projects: ['id', 'name', 'show_in_sidebar'],
+  projects: ['id', 'name', 'show_in_sidebar', 'main_repo_path'],
   app_state: ['key', 'value'],
 };
 
@@ -83,7 +83,7 @@ export class AppDb {
   }
 
   /** Projects shown in the app's Sessions sidebar, in the user's own order. */
-  listProjects(): { id: string; name: string }[] {
+  listProjects(): { id: string; name: string; dir?: string }[] {
     try {
       const rows = this.select('projects').filter((p) => p.show_in_sidebar == null || p.show_in_sidebar === 1);
       let order: string[] = [];
@@ -101,7 +101,7 @@ export class AppDb {
         return i < 0 ? Number.MAX_SAFE_INTEGER : i;
       };
       return rows
-        .map((p) => ({ id: String(p.id), name: String(p.name ?? p.id) }))
+        .map((p) => ({ id: String(p.id), name: String(p.name ?? p.id), dir: p.main_repo_path ? String(p.main_repo_path) : undefined }))
         .sort((a, b) => rank(a.id) - rank(b.id));
     } catch {
       this.close();

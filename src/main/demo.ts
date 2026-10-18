@@ -42,8 +42,8 @@ const TITLES = [
 /** The rooms of the Copilot app's Sessions sidebar, as a demo. */
 const DEMO_ROOM_NAMES = ['ur-agents', 'sqezz.best', 'Sqezist-App---Minecraft-Client-', 'koziolpawelpagepreview', 'axifek-community-bot', 'Delay-spawning-in-Minecraft', 'exosware-1.21.4-main', 'sqezz-client', '7liceumKlasa1A.online', 'sqezzbio', 'flexa.click', 'Copilot-Meter'];
 const DEMO_ROOMS: RoomInfo[] = [
-  ...DEMO_ROOM_NAMES.map((name, i): RoomInfo => ({ id: `demo-room-${i}`, name, kind: 'project' })),
-  { id: 'chats', name: 'Chats', kind: 'chats' },
+  ...DEMO_ROOM_NAMES.map((name, i): RoomInfo => ({ id: `demo-room-${i}`, name, kind: 'project', canLaunch: true })),
+  { id: 'chats', name: 'Chats', kind: 'chats', canLaunch: true },
 ];
 /** Which room each demo agent sits in (index into DEMO_ROOMS). */
 const ROOM_OF = [0, 0, 0, 1, 1, 2, 2, 3, 5, 9, 12, 12, 10, 4];

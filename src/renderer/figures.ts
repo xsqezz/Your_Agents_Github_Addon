@@ -6,7 +6,7 @@ export type Pose = 'sleep' | 'think' | 'shell' | 'read' | 'write' | 'web' | 'tas
 
 export function poseFor(state: AgentState, category?: ToolCategory): Pose {
   switch (state) {
-    case 'offline': return 'off';
+    case 'offline': return 'sleep';
     case 'idle': return 'sleep';
     case 'thinking': return 'think';
     case 'awaiting-input': return 'hand';

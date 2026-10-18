@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { dataDir } from '../../bridge/protocol.mjs';
 import { familyOf, tierOf } from '../core/family.ts';
 import type { RoomInfo, SessionDetail, SessionSummary, Snapshot } from '../core/types.ts';
 import { AppDb, type AppSessionInfo } from './appdb.ts';
-import type { Source, SourceInfo } from './source.ts';
+import type { LaunchTarget, Source, SourceInfo } from './source.ts';
 import { eventsPath, livePid, Tailer } from './tailer.ts';
 
 const TICK_MS = 800;
@@ -12,12 +13,30 @@ const DB_REFRESH_MS = 2500;
 const DIR_SCAN_MS = 6000;
 const RECENT_MS = 3 * 24 * 3600_000;
 const DESKS_PER_ROOM = 10;
-const MAX_SESSIONS = 90;
+const MAX_SESSIONS = 140;
 const CHATS_ROOM = 'chats';
 const OTHER_ROOM = 'other';
 
 export function resolveHome(arg?: string): string {
   return arg || process.env.COPILOT_HOME || path.join(os.homedir(), '.copilot');
+}
+
+function dirExists(p: string | undefined): p is string {
+  try {
+    return !!p && fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Name the CLI wrote for a session that the app database does not know. */
+function cliName(stateDir: string, id: string): string | undefined {
+  try {
+    const m = /^name:\s*(.+)$/m.exec(fs.readFileSync(path.join(stateDir, id, 'workspace.yaml'), 'utf8'));
+    return m ? m[1].trim().replace(/^["']|["']$/g, '') || undefined : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 interface Candidate {
@@ -33,7 +52,7 @@ function parseTs(s?: string | null): number {
 }
 
 /** Read-only view of what the Copilot app and CLI already persist under ~/.copilot. */
-export class LiveSource implements Source {
+export class LiveSource implements Source, LaunchTarget {
   private home: string;
   private stateDir: string;
   private appDb: AppDb;
@@ -47,14 +66,46 @@ export class LiveSource implements Source {
   private dirRecent = new Map<string, number>();
   private lastJson = '';
   private busy = false;
-  private projects: { id: string; name: string }[] = [];
+  private projects: { id: string; name: string; dir?: string }[] = [];
   private roomById = new Map<string, string>();
+  private names = new Map<string, string | undefined>();
+  private hints: Record<string, string> = {};
+  private hintsFile: string;
   private onUpdate: (snapshot: Snapshot) => void = () => {};
 
   constructor(home: string) {
     this.home = home;
     this.stateDir = path.join(home, 'session-state');
     this.appDb = new AppDb(path.join(home, 'data.db'));
+    this.hintsFile = path.join(dataDir(), 'launched.json');
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.hintsFile, 'utf8'));
+      if (saved && typeof saved === 'object') for (const [k, v] of Object.entries(saved)) if (typeof v === 'string') this.hints[k] = v;
+    } catch {
+      /* nothing launched yet */
+    }
+  }
+
+  /** Folder a new agent in this room starts in. */
+  roomDir(roomId: string): string | undefined {
+    if (roomId === CHATS_ROOM) {
+      const chats = path.join(this.home, 'chats');
+      return dirExists(chats) ? chats : undefined;
+    }
+    const dir = this.projects.find((p) => p.id === roomId)?.dir;
+    return dirExists(dir) ? dir : undefined;
+  }
+
+  /** Files a session started from ur-agents under its room (the app database never hears of it). */
+  addHint(sessionId: string, roomId: string): void {
+    this.hints[sessionId] = roomId;
+    try {
+      fs.mkdirSync(path.dirname(this.hintsFile), { recursive: true });
+      fs.writeFileSync(this.hintsFile, JSON.stringify(this.hints));
+    } catch {
+      /* the hint still works for this run */
+    }
+    this.lastScanAt = 0;
   }
 
   info(): SourceInfo {
@@ -114,7 +165,7 @@ export class LiveSource implements Source {
       if (!/^[0-9a-f-]{36}$/i.test(id)) continue;
       try {
         const st = fs.statSync(eventsPath(this.stateDir, id));
-        if (now - st.mtimeMs < RECENT_MS) this.dirRecent.set(id, st.mtimeMs);
+        if (now - st.mtimeMs < RECENT_MS || this.hints[id]) this.dirRecent.set(id, st.mtimeMs);
       } catch {
         /* no events file */
       }
@@ -135,9 +186,11 @@ export class LiveSource implements Source {
     for (const c of pool.values()) {
       const pid = livePid(this.stateDir, c.id);
       if (pid) this.liveSet.add(c.id);
-      if (!(pid || c.db?.is_running || now - c.activity < RECENT_MS)) continue;
-      const room = this.roomOf(c.db);
+      const room = this.roomOf(c.db, c.id);
       if (!room) continue;
+      // Sessions that belong to a folder keep their desk however old they are; strays only while recent.
+      const owned = (!!c.db && room !== OTHER_ROOM) || !!this.hints[c.id];
+      if (!(pid || c.db?.is_running || owned || now - c.activity < RECENT_MS)) continue;
       c.room = room;
       chosen.push(c);
     }
@@ -171,18 +224,25 @@ export class LiveSource implements Source {
   }
 
   /** Which room a session lives in: its project folder, Chats, or Other (CLI sessions the app does not know). */
-  private roomOf(db?: AppSessionInfo): string | null {
+  private roomOf(db: AppSessionInfo | undefined, id: string): string | null {
     if (db?.session_type === 'general_chat') return CHATS_ROOM;
     if (db?.session_type === 'side_chat') return null;
     if (db?.projectId && this.projects.length) return this.projects.some((p) => p.id === db.projectId) ? db.projectId : null;
+    const hint = this.hints[id];
+    if (hint && (hint === CHATS_ROOM || this.projects.some((p) => p.id === hint))) return hint;
     return OTHER_ROOM;
   }
 
   private rooms(used: Set<string>): RoomInfo[] {
-    const rooms: RoomInfo[] = this.projects.map((p) => ({ id: p.id, name: p.name, kind: 'project' }));
-    rooms.push({ id: CHATS_ROOM, name: 'Chats', kind: 'chats' });
-    if (used.has(OTHER_ROOM)) rooms.push({ id: OTHER_ROOM, name: 'Other sessions', kind: 'other' });
+    const rooms: RoomInfo[] = this.projects.map((p) => ({ id: p.id, name: p.name, kind: 'project', canLaunch: dirExists(p.dir) }));
+    rooms.push({ id: CHATS_ROOM, name: 'Chats', kind: 'chats', canLaunch: dirExists(path.join(this.home, 'chats')) });
+    if (used.has(OTHER_ROOM)) rooms.push({ id: OTHER_ROOM, name: 'Other sessions', kind: 'other', canLaunch: false });
     return rooms;
+  }
+
+  private cliTitle(id: string): string {
+    if (!this.names.has(id) || this.names.get(id) === undefined) this.names.set(id, cliName(this.stateDir, id));
+    return this.names.get(id) || id.slice(0, 8);
   }
 
   private publish(now: number): void {
@@ -199,7 +259,7 @@ export class LiveSource implements Source {
       list.push({
         id,
         room: this.roomById.get(id) ?? OTHER_ROOM,
-        title: db?.title?.trim() || db?.workspaceName || id.slice(0, 8),
+        title: db?.title?.trim() || db?.workspaceName || this.cliTitle(id),
         project: db?.project ?? undefined,
         branch: db?.branch ?? undefined,
         ...snap,

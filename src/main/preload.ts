@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('ua', {
   controlInstall: () => ipcRenderer.invoke('ua:control-install'),
   controlUninstall: () => ipcRenderer.invoke('ua:control-uninstall'),
   controlSend: (id: string, command: unknown) => ipcRenderer.invoke('ua:control-send', id, command),
+  launch: (request: unknown) => ipcRenderer.invoke('ua:launch', request),
   onControl: (cb: (state: unknown) => void) => {
     ipcRenderer.on('ua:control', (_e, state) => cb(state));
   },

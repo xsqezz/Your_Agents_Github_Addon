@@ -11,3 +11,9 @@ export interface Source {
   stop(): void;
   detail(id: string, since: number): SessionDetail | null;
 }
+
+/** What starting a new agent needs from the live source: the room's folder and a way to file the new session under it. */
+export interface LaunchTarget {
+  roomDir(roomId: string): string | undefined;
+  addHint(sessionId: string, roomId: string): void;
+}

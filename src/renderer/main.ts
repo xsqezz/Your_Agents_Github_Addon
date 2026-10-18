@@ -1,10 +1,12 @@
 import { FAMILY_LABEL } from '../core/family.ts';
 import type { AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
 import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
+import type { LaunchResult } from '../core/launch.ts';
 import { initControl, renderControl } from './control.ts';
+import { initLauncher, openLauncher, renderLauncher } from './launch.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
-import { ago, duration, isOccupied, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
+import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
 
 declare global {
   interface Window {
@@ -19,6 +21,7 @@ declare global {
       controlInstall(): Promise<ControlResult>;
       controlUninstall(): Promise<ControlResult>;
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
+      launch(request: unknown): Promise<LaunchResult>;
       onControl(cb: (state: ControlState) => void): void;
     };
   }
@@ -43,7 +46,7 @@ const store = {
   roomPinned: params.get('room') != null || localStorage.getItem('ua.room') != null,
   selectedId: null as string | null,
   view: (params.get('view') ?? localStorage.getItem('ua.view') ?? '3d') as '3d' | 'list',
-  showOffline: localStorage.getItem('ua.offline') === '1',
+  showOffline: localStorage.getItem('ua.offline.v2') !== '0',
   tab: 'live' as 'live' | 'info',
   follow: true,
   since: 0,
@@ -99,7 +102,8 @@ function renderTopbar(): void {
 function renderStatus(): void {
   const bar = $('statusbar');
   const vis = visible();
-  const occupied = vis.filter((s) => isOccupied(s.state)).length;
+  const seated = Math.min(vis.length, MIN_DESKS);
+  const working = vis.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length;
   const unseated = Math.max(0, vis.length - MIN_DESKS);
   const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${store.home}`;
   bar.replaceChildren(
@@ -107,7 +111,7 @@ function renderStatus(): void {
     h('span', { text }),
     h('span', { class: 'spacer' }),
     ...(unseated ? [h('span', { text: `${unseated} more without a desk — see List view` })] : []),
-    h('span', { text: `${currentRoom()?.name ?? 'Room'} · ${Math.min(occupied, MIN_DESKS)} of ${MIN_DESKS} desks occupied` }),
+    h('span', { text: `${currentRoom()?.name ?? 'Room'} · ${seated} of ${MIN_DESKS} desks taken · ${working} working` }),
   );
 }
 
@@ -396,12 +400,13 @@ function render(): void {
     const hidden = store.all.filter((s) => s.room === store.room).length;
     emptyEl.querySelector('h2')!.textContent = `All desks are free in ${currentRoom()?.name ?? 'this room'}`;
     emptyEl.querySelector('p')!.textContent = hidden
-      ? `${hidden} session${hidden > 1 ? 's are' : ' is'} offline here. Turn on “Show offline” to see them.`
-      : 'No agent is working in this folder. Start one in the GitHub Copilot app and it takes a desk.';
+      ? `${hidden} past session${hidden > 1 ? 's are' : ' is'} hidden here. Turn on “Show offline” to seat them.`
+      : 'No agent has worked in this folder yet. Click a desk to start one.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
   renderList();
+  renderLauncher();
   stage.hidden = store.view !== '3d';
   listView.hidden = store.view !== 'list';
 }
@@ -426,8 +431,10 @@ function cycle(dir: number): void {
 }
 
 function boot(): void {
-  scene = new OfficeScene(stage, { onSelect: select });
+  scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openLauncher });
   initControl(selected);
+  initLauncher(currentRoom);
+  window.ua.onControl(() => renderLauncher());
 
   document.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
@@ -454,10 +461,11 @@ function boot(): void {
       if (store.follow) $('tab-live').scrollTop = $('tab-live').scrollHeight;
     }
     if (t.closest('#overview')) scene.frameAll(true);
+    if (t.closest('#new-agent')) openLauncher();
   });
   $('show-offline').addEventListener('change', (e) => {
     store.showOffline = (e.target as HTMLInputElement).checked;
-    localStorage.setItem('ua.offline', store.showOffline ? '1' : '0');
+    localStorage.setItem('ua.offline.v2', store.showOffline ? '1' : '0');
     render();
   });
   $('tab-live').addEventListener('scroll', () => {
@@ -470,9 +478,12 @@ function boot(): void {
   });
   window.addEventListener('keydown', (e) => {
     const tag = (e.target as HTMLElement).tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ($('launch') as HTMLDialogElement).open) return;
     if (e.key === 'Escape') select(null);
-    else if (e.key === 'ArrowRight') cycle(1);
+    else if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      openLauncher();
+    } else if (e.key === 'ArrowRight') cycle(1);
     else if (e.key === 'ArrowLeft') cycle(-1);
     else if (e.key === 'PageDown' || (e.altKey && e.key === 'ArrowDown')) {
       e.preventDefault();
@@ -511,6 +522,7 @@ async function start(): Promise<void> {
   store.rooms = snap.rooms;
   announce(store.all);
   render();
+  if (params.get('launch') === '1') setTimeout(openLauncher, 800);
   const sel = params.get('select');
   if (sel !== null) {
     const vis = visible();

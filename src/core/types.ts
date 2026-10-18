@@ -75,6 +75,8 @@ export interface RoomInfo {
   id: string;
   name: string;
   kind: 'project' | 'chats' | 'other';
+  /** A new agent can be started here (the room has a folder on disk). */
+  canLaunch?: boolean;
 }
 
 export interface Snapshot {

@@ -7,6 +7,7 @@ import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
 import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
+import { CliLauncher, DemoLauncher, type Launcher } from './launcher.ts';
 import type { Source } from './source.ts';
 
 function arg(name: string): string | undefined {
@@ -25,6 +26,7 @@ const ATTENTION: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error
 let win: BrowserWindow | null = null;
 let source: Source;
 let control: Controller;
+let launcher: Launcher;
 let latest: Snapshot = { rooms: [], sessions: [] };
 let primed = false;
 const lastStates = new Map<string, AgentState>();
@@ -75,6 +77,7 @@ function createWindow(): void {
   if (view) query.view = view;
   const room = arg('room');
   if (room) query.room = room;
+  if (has('launch')) query.launch = '1';
   void win.loadFile(path.join(__dirname, 'index.html'), { query });
 
   if (shotFile) {
@@ -99,9 +102,12 @@ app.whenReady().then(async () => {
     const ds = new DemoSource(arg('agents')?.split(',').map((m) => m.trim()).filter(Boolean));
     source = ds;
     control = new DemoControl(ds, pushControl);
+    launcher = new DemoLauncher(() => control.state().enabled);
   } else {
-    source = new LiveSource(home);
+    const live = new LiveSource(home);
+    source = live;
     control = new ControlServer({ copilotHome: home, bridgeSource: path.join(__dirname, 'bridge'), onChange: pushControl });
+    launcher = new CliLauncher(live, () => control.state().enabled);
   }
 
   ipcMain.handle('ua:info', () => source.info());
@@ -112,6 +118,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-install', () => control.install());
   ipcMain.handle('ua:control-uninstall', () => control.uninstall());
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
+  ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
 
   createWindow();
   await control.start();
