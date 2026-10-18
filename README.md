@@ -1,6 +1,6 @@
 # ur-agents
 
-A 3D hall for your GitHub Copilot agents. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with ten fixed desks (more rows of five if you ever have more than ten sessions). Every agent session claims a desk: while the agent works, a small vinyl-toy robot sits at it and its pose shows what it is doing; when the agent is idle or offline the chair is tucked in, the laptop is closed and the lamp is off. Click an agent to read everything about it and watch its events stream in live.
+A 3D hall for your GitHub Copilot agents. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with exactly ten fixed desks (two rows of five; the row by the window is turned round, so its agents face the room). With more than ten sessions, working agents get desks first and the rest are listed in the List view. Every agent session claims a desk: while the agent works, a small vinyl-toy robot sits at it and its pose shows what it is doing; when the agent is idle or offline the chair is tucked in, the laptop is closed and the lamp is off. Click an agent to read everything about it and watch its events stream in live.
 
 **Version 0.1 is read-only**: it only reads what the Copilot app and CLI already write under `~/.copilot`. Controlling agents (send a message, stop, answer, approve) is planned — see [docs/PLAN.md](docs/PLAN.md).
 

@@ -90,7 +90,7 @@ export class DemoSource implements Source {
   private onUpdate: (list: SessionSummary[]) => void = () => {};
 
   constructor(models?: string[]) {
-    this.models = models && models.length ? models : MODELS;
+    this.models = models && models.length ? models : MODELS.slice(0, 10);
   }
 
   info(): SourceInfo {
@@ -99,7 +99,7 @@ export class DemoSource implements Source {
 
   async start(onUpdate: (list: SessionSummary[]) => void): Promise<void> {
     this.onUpdate = onUpdate;
-    const count = this.models.length === MODELS.length ? TITLES.length : this.models.length;
+    const count = this.models.length;
     this.agents = Array.from({ length: count }, (_, index) => {
       const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1 };
       this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index % TITLES.length]}.` });

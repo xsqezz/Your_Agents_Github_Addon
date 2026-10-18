@@ -1,7 +1,7 @@
 import { FAMILY_LABEL } from '../core/family.ts';
 import type { AgentState, SessionDetail, SessionSummary, TimelineItem } from '../core/types.ts';
 import { OfficeScene } from './scene.ts';
-import { capacityFor } from './layout.ts';
+import { MIN_DESKS } from './layout.ts';
 import { ago, duration, isOccupied, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
 
 declare global {
@@ -85,13 +85,14 @@ function renderStatus(): void {
   const bar = $('statusbar');
   const vis = visible();
   const occupied = vis.filter((s) => isOccupied(s.state)).length;
-  const desks = capacityFor(vis.length);
+  const unseated = Math.max(0, vis.length - MIN_DESKS);
   const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${store.home}`;
   bar.replaceChildren(
     h('span', { class: 'live-dot' }),
     h('span', { text }),
     h('span', { class: 'spacer' }),
-    h('span', { text: `${occupied} of ${desks} desks occupied` }),
+    ...(unseated ? [h('span', { text: `${unseated} more without a desk — see List view` })] : []),
+    h('span', { text: `${Math.min(occupied, MIN_DESKS)} of ${MIN_DESKS} desks occupied` }),
   );
 }
 

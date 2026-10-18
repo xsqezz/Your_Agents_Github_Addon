@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { SessionSummary } from '../core/types.ts';
 import { Figure, poseFor } from './figures.ts';
 import { Hall } from './hall.ts';
-import { capacityFor, COLS, deskPos, hallSize, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
+import { COLS, deskPos, hallSize, MIN_DESKS, rowsFor, SPACING_X, SPACING_Z } from './layout.ts';
 import { drawActivity, drawFocus, Monitor, SCREEN_H, SCREEN_W, TOP_H, TOP_W } from './screens.ts';
 import { isOccupied, NEEDS_YOU, STATE_COLOR } from './theme.ts';
 
@@ -380,7 +380,7 @@ export class OfficeScene {
       }
     });
 
-    this.ensureDesks(capacityFor(0));
+    this.ensureDesks(MIN_DESKS);
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
     this.frameAll(false);
@@ -402,11 +402,6 @@ export class OfficeScene {
       this.desks.push(d);
       this.scene.add(d.group);
     }
-    while (this.desks.length > count && !this.desks[this.desks.length - 1].summary) {
-      const d = this.desks.pop()!;
-      this.scene.remove(d.group);
-      d.dispose();
-    }
     const rows = rowsFor(this.desks.length);
     if (rows !== this.rows) {
       this.rows = rows;
@@ -421,31 +416,42 @@ export class OfficeScene {
     for (const d of this.desks) {
       const [x, z] = deskPos(d.index, this.rows);
       d.group.position.set(x, 0, z);
+      d.group.rotation.y = this.facesWindow(d.index) ? Math.PI : 0;
     }
   }
 
+  /** The row next to the window is turned round: its agents face the room, their monitors face the window. */
+  private facesWindow(index: number): boolean {
+    return Math.floor(index / COLS) === 0;
+  }
+
+  /** Always exactly MIN_DESKS desks. With more sessions than desks, working agents get seats first. */
   setSessions(list: SessionSummary[]): void {
     const byId = new Map(list.map((s) => [s.id, s]));
+    const ranked = list
+      .map((s, i) => ({ s, i }))
+      .sort((a, b) => Number(!isOccupied(a.s.state)) - Number(!isOccupied(b.s.state)) || a.i - b.i)
+      .slice(0, MIN_DESKS);
+    const wanted = new Set(ranked.map((r) => r.s.id));
+
     for (const [id, idx] of [...this.assigned]) {
-      if (byId.has(id)) continue;
+      if (byId.has(id) && wanted.has(id)) continue;
       this.assigned.delete(id);
       this.desks[idx]?.assign(null);
       if (this.selectedId === id) this.handlers.onSelect(null);
     }
-    const highest = Math.max(-1, ...this.assigned.values());
-    this.ensureDesks(capacityFor(list.length, highest));
-    for (const s of list) {
+    this.ensureDesks(MIN_DESKS);
+    for (const { s } of ranked) {
       if (this.assigned.has(s.id)) continue;
       const free = this.desks.find((d) => !d.summary);
       if (!free) continue;
       this.assigned.set(s.id, free.index);
       free.assign(s);
     }
-    for (const s of list) {
+    for (const { s } of ranked) {
       const idx = this.assigned.get(s.id);
       if (idx !== undefined) this.desks[idx].assign(s);
     }
-    this.ensureDesks(capacityFor(list.length, Math.max(-1, ...this.assigned.values())));
   }
 
   setSelected(id: string | null, panelPx: number): void {
@@ -478,7 +484,9 @@ export class OfficeScene {
     if (idx === undefined) return;
     const p = this.desks[idx].group.position;
     this.userMoved = true;
-    this.go(new THREE.Vector3(p.x, p.y + 7.6, p.z + 5.6), new THREE.Vector3(p.x, p.y + 2.3, p.z - 1.2), true);
+    // Monitors face away from the room in the window row, so view those desks from the window side.
+    const dir = this.facesWindow(idx) ? -1 : 1;
+    this.go(new THREE.Vector3(p.x, p.y + 8.4, p.z + dir * 4.0), new THREE.Vector3(p.x, p.y + 2.2, p.z - dir * 1.2), true);
   }
 
   private go(pos: THREE.Vector3, target: THREE.Vector3, animate: boolean): void {
