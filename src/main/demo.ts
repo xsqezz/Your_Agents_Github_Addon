@@ -54,10 +54,15 @@ interface DemoAgent {
 
 export class DemoSource implements Source {
   private agents: DemoAgent[] = [];
+  private models: string[];
   private timer: NodeJS.Timeout | null = null;
   private lastJson = '';
   private startedAt = Date.now();
   private onUpdate: (list: SessionSummary[]) => void = () => {};
+
+  constructor(models?: string[]) {
+    this.models = models && models.length ? models : MODELS;
+  }
 
   info(): SourceInfo {
     return { mode: 'demo', home: 'synthetic demo data' };
@@ -65,9 +70,10 @@ export class DemoSource implements Source {
 
   async start(onUpdate: (list: SessionSummary[]) => void): Promise<void> {
     this.onUpdate = onUpdate;
-    this.agents = TITLES.map((_, index) => {
+    const count = this.models.length === MODELS.length ? TITLES.length : this.models.length;
+    this.agents = Array.from({ length: count }, (_, index) => {
       const a: DemoAgent = { index, rev: 0, items: [], lastSegment: -1 };
-      this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index]}.` });
+      this.add(a, { kind: 'user', title: 'Prompt', body: `Please work on: ${TITLES[index % TITLES.length]}.` });
       this.add(a, { kind: 'assistant', title: 'Agent', body: 'On it. I will start by reading the relevant code and running the tests.' });
       return a;
     });
@@ -116,7 +122,7 @@ export class DemoSource implements Source {
         else if (step.state === 'done') this.add(a, { kind: 'system', title: 'Task complete', body: 'All checks pass.', status: 'ok' });
         else if (step.state === 'thinking') this.add(a, { kind: 'assistant', title: 'Agent', body: 'Let me think about the cleanest way to do this.' });
       }
-      const model = MODELS[a.index % MODELS.length];
+      const model = this.models[a.index % this.models.length];
       const segStart = this.startedAt + (seg - a.index) * SEGMENT_MS;
       const subagents: SubAgentInfo[] = [];
       for (let s = 0; s < (step.subs ?? 0); s++) {
@@ -129,9 +135,9 @@ export class DemoSource implements Source {
       const live = step.state !== 'offline';
       list.push({
         id: `demo-${a.index}`,
-        title: TITLES[a.index],
+        title: TITLES[a.index % TITLES.length],
         project: ['ur-agents', 'billing', 'docs', 'web'][a.index % 4],
-        branch: `feat/${TITLES[a.index].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
+        branch: `feat/${TITLES[a.index % TITLES.length].toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
         model, family: familyOf(model), tier: tierOf(model),
         mode: a.index % 3 === 0 ? 'autopilot' : 'interactive',
         state: step.state, stateSince: segStart, activity: step.activity, category: step.category,

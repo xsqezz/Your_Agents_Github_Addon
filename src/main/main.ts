@@ -85,7 +85,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  source = demo ? new DemoSource() : new LiveSource(resolveHome(arg('copilot-home')));
+  source = demo ? new DemoSource(arg('agents')?.split(',').map((m) => m.trim()).filter(Boolean)) : new LiveSource(resolveHome(arg('copilot-home')));
 
   ipcMain.handle('ua:info', () => source.info());
   ipcMain.handle('ua:list', () => latest);

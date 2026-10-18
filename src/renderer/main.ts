@@ -1,7 +1,8 @@
 import { FAMILY_LABEL } from '../core/family.ts';
 import type { AgentState, SessionDetail, SessionSummary, TimelineItem } from '../core/types.ts';
 import { OfficeScene } from './scene.ts';
-import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
+import { capacityFor } from './layout.ts';
+import { ago, duration, isOccupied, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
 
 declare global {
   interface Window {
@@ -82,8 +83,16 @@ function renderTopbar(): void {
 
 function renderStatus(): void {
   const bar = $('statusbar');
+  const vis = visible();
+  const occupied = vis.filter((s) => isOccupied(s.state)).length;
+  const desks = capacityFor(vis.length);
   const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${store.home}`;
-  bar.replaceChildren(h('span', { class: 'live-dot' }), h('span', { text }), h('span', { class: 'spacer' }), h('span', { text: `${visible().length} of ${store.all.length} agents shown` }));
+  bar.replaceChildren(
+    h('span', { class: 'live-dot' }),
+    h('span', { text }),
+    h('span', { class: 'spacer' }),
+    h('span', { text: `${occupied} of ${desks} desks occupied` }),
+  );
 }
 
 /* ───────────── list view ───────────── */
@@ -290,12 +299,12 @@ function render(): void {
   renderStatus();
   const vis = visible();
   scene.setSessions(vis);
-  emptyEl.hidden = vis.length > 0;
+  emptyEl.hidden = vis.length > 0 || store.view !== '3d';
   if (!vis.length) {
     const hidden = store.all.length;
     emptyEl.querySelector('p')!.textContent = hidden
       ? `${hidden} recent session${hidden > 1 ? 's are' : ' is'} offline. Turn on “Show offline” to see them.`
-      : 'Start an agent in the GitHub Copilot app and it will appear here. Run with --demo to preview the office.';
+      : 'Start an agent in the GitHub Copilot app and it takes a desk here. Run with --demo to preview the hall.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();

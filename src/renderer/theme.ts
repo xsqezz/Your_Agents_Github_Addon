@@ -55,6 +55,11 @@ export function stateText(s: Pick<SessionSummary, 'state' | 'category'>): string
 
 export const NEEDS_YOU: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error'];
 
+/** A desk is occupied while its agent is actually doing something; idle and offline agents leave it empty. */
+export function isOccupied(state: AgentState): boolean {
+  return state !== 'idle' && state !== 'offline';
+}
+
 export function ago(ts: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - ts) / 1000));
   if (s < 5) return 'just now';

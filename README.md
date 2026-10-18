@@ -1,6 +1,6 @@
 # ur-agents
 
-A 3D office for your GitHub Copilot agents. Every agent session is a small vinyl-toy robot sitting at its own desk; its pose and expression show what it is doing right now. Click one to read everything about it and watch its events stream in live.
+A 3D hall for your GitHub Copilot agents. A modernist hall with ten fixed desks (more rows of five if you ever have more than ten sessions). Every agent session claims a desk: while the agent works, a small vinyl-toy robot sits at it and its pose shows what it is doing; when the agent is idle or offline the chair is tucked in, the laptop is closed and the lamp is off. Click an agent to read everything about it and watch its events stream in live.
 
 **Version 0.1 is read-only**: it only reads what the Copilot app and CLI already write under `~/.copilot`. Controlling agents (send a message, stop, answer, approve) is planned — see [docs/PLAN.md](docs/PLAN.md).
 
@@ -21,13 +21,15 @@ npm run pack
 
 Other scripts: `npm test`, `npm run typecheck`.
 
-Flags: `--demo`, `--copilot-home <dir>`, `--view list`, `--select <n>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
+Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agent per model), `--copilot-home <dir>`, `--view list`, `--select <n>`, `--screenshot <file> [--delay <ms>]`, `--dump <file>` (writes the session list as JSON).
 
 ## What you see
 
+A desk is **occupied** while its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled. **Idle** and **offline** agents leave it empty (their name tag stays so you can still click them). Desks are numbered and keep their session for as long as it is listed.
+
 | State | Figure |
 |---|---|
-| Idle | dozing (Zzz) |
+| Idle / offline | empty desk: chair tucked in, laptop closed |
 | Thinking | chin on hand, "…" bubble |
 | Terminal / reading / editing / web | typing / paper and magnifier / pen / globe |
 | Delegating | smaller figures of the sub-agents sit beside the desk |
@@ -36,7 +38,7 @@ Flags: `--demo`, `--copilot-home <dir>`, `--view list`, `--select <n>`, `--scree
 | Compacting | squashes, packing boxes |
 | Error | red, X eyes, smoke |
 | Done | cheering |
-| Offline / stalled | empty chair / grey and frozen |
+| Offline / stalled | grey and frozen (stalled) |
 
 The figure's look follows the model family (`claude-*` orange block, `gpt-*`/codex dark robot with headphones, `gemini-*` blue with lobes, `grok-*` graphite with a slash visor, `mai-*` teal, anything else grey). The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
 
