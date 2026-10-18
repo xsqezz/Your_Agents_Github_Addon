@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron';
 import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
 import type { Controller } from '../core/control.ts';
 import { ControlServer } from './control.ts';
@@ -96,6 +96,40 @@ function notifyAttention(list: SessionSummary[]): void {
   primed = true;
 }
 
+/** The window has no native frame, so edge resizing is done here: follow the cursor while a grip is held. */
+let resizeTimer: NodeJS.Timeout | null = null;
+function stopResize(): void {
+  if (resizeTimer) clearInterval(resizeTimer);
+  resizeTimer = null;
+}
+function startResize(edge: string): void {
+  stopResize();
+  if (!win || win.isMaximized() || win.isFullScreen() || !/^(n|s|e|w|ne|nw|se|sw)$/.test(edge)) return;
+  const target = win;
+  const start = target.getBounds();
+  const from = screen.getCursorScreenPoint();
+  const [minW, minH] = target.getMinimumSize();
+  const fuse = Date.now() + 30_000;
+  resizeTimer = setInterval(() => {
+    if (target.isDestroyed() || Date.now() > fuse) return stopResize();
+    const p = screen.getCursorScreenPoint();
+    const dx = p.x - from.x;
+    const dy = p.y - from.y;
+    let { x, y, width, height } = start;
+    if (edge.includes('e')) width = Math.max(minW, start.width + dx);
+    if (edge.includes('s')) height = Math.max(minH, start.height + dy);
+    if (edge.includes('w')) {
+      width = Math.max(minW, start.width - dx);
+      x = start.x + start.width - width;
+    }
+    if (edge.includes('n')) {
+      height = Math.max(minH, start.height - dy);
+      y = start.y + start.height - height;
+    }
+    target.setBounds({ x, y, width, height });
+  }, 8);
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1560,
@@ -103,7 +137,10 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 620,
     show: false,
-    backgroundColor: '#090d12',
+    // The page draws its own rounded window, so the real one is frameless and transparent.
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
     title: 'ur-agents',
     autoHideMenuBar: true,
     webPreferences: {
@@ -116,6 +153,12 @@ function createWindow(): void {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.once('ready-to-show', () => win?.show());
+  const pushState = (): void => {
+    win?.webContents.send('ua:win-state', { maximized: win.isMaximized(), fullscreen: win.isFullScreen() });
+  };
+  for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'] as const) win.on(ev, pushState);
+  win.on('closed', stopResize);
+  win.webContents.on('did-finish-load', pushState);
 
   const query: Record<string, string> = {};
   const sel = arg('select');
@@ -171,6 +214,17 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-uninstall', () => control.uninstall());
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
   ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
+  ipcMain.on('ua:win', (e, action: unknown) => {
+    if (!win || e.sender !== win.webContents) return;
+    if (action === 'minimize') win.minimize();
+    else if (action === 'maximize') (win.isMaximized() ? win.unmaximize() : win.maximize());
+    else if (action === 'close') win.close();
+  });
+  ipcMain.on('ua:win-resize', (e, edge: unknown) => {
+    if (!win || e.sender !== win.webContents) return;
+    if (typeof edge === 'string') startResize(edge);
+    else stopResize();
+  });
 
   createWindow();
   await control.start();

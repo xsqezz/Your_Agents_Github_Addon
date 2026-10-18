@@ -12,7 +12,7 @@ Build the installer and run it:
 npm run dist          # out/installer/ur-agents-Setup-<version>.exe
 ```
 
-The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_agents`, adds a **Desktop** shortcut and a Start Menu entry, and starts the app. Only one window runs at a time (starting it again just brings it forward). Uninstall from Windows Settings > Apps; that removes the shortcuts and the bridge extension from `~/.copilot/extensions`, and leaves your settings and audit log in `%LOCALAPPDATA%\ur-agents`. The installer is not code-signed, so Windows SmartScreen may ask you to confirm ("More info" > "Run anyway").
+The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_agents`, adds a **Desktop** shortcut and a Start Menu entry, and starts the app. The window is frameless with rounded corners and its own minimize / maximize / close buttons: drag the top bar to move it, drag any edge or corner to resize. Only one window runs at a time (starting it again just brings it forward). Uninstall from Windows Settings > Apps; that removes the shortcuts and the bridge extension from `~/.copilot/extensions`, and leaves your settings and audit log in `%LOCALAPPDATA%\ur-agents`. The installer is not code-signed, so Windows SmartScreen may ask you to confirm ("More info" > "Run anyway").
 
 ## Run from source
 
@@ -69,7 +69,7 @@ A working agent sits with its back to you, facing its monitors. When it needs yo
 | Done | turns to you, cheering |
 | Stalled | grey and frozen |
 
-All figures share one body — a chunky vinyl-toy block with two glossy oval eyes, stubby side nubs and four short legs — and differ by colour and emblem (printed on the chest and on the back, so you can tell them apart while they face their screens): `claude-*` orange with a starburst, `gpt-*`/codex teal with a six-petal rosette, `gemini-*` rainbow gradient with a four-point sparkle, `grok-*` graphite with a slashed ring and "GROK", `mai-*` white with four coloured squares, anything else grey. The emblems are simple glyphs drawn in code, not the companies' official logos. The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
+All figures share one body — a chunky vinyl-toy block with two glossy oval eyes, stubby side nubs and four short legs — and differ by colour and emblem (printed on the chest and on the back, so you can tell them apart while they face their screens): `claude-*` orange with a starburst, `gpt-*`/codex teal with a six-petal rosette, `gemini-*` rainbow gradient with a four-point sparkle, `grok-*` graphite with a slashed ring and "GROK", `mai-*` white with four coloured squares, `auto` (GitHub Copilot's automatic model selection) dark graphite with the white GitHub mark, anything else grey. The emblems are simple glyphs drawn in code, not the companies' official logos, except the GitHub mark, which is the MIT-licensed Octicon. The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
 
 ## Controlling agents
 
