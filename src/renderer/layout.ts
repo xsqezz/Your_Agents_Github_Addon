@@ -19,5 +19,5 @@ export function deskPos(index: number, rows: number): [number, number] {
 }
 
 export function hallSize(rows: number): { w: number; d: number } {
-  return { w: COLS * SPACING_X + 8, d: rows * SPACING_Z + 7.2 };
+  return { w: COLS * SPACING_X + 6.5, d: rows * SPACING_Z + 4.2 };
 }

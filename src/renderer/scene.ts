@@ -465,12 +465,12 @@ export class OfficeScene {
     const pitch = (53 * Math.PI) / 180;
     const usableW = Math.max(300, this.width - this.panelPx);
     const usableH = Math.max(300, this.height - 120);
-    const needH = rows * SPACING_Z * Math.sin(pitch) + 10.2;
-    const needW = COLS * SPACING_X + 7;
+    const needH = rows * SPACING_Z * Math.sin(pitch) + 8.2;
+    const needW = COLS * SPACING_X + 6.5;
     const distV = needH / 2 / (half * (usableH / this.height));
     const distH = needW / 2 / (half * aspect * (usableW / this.width));
     const dist = Math.max(12, distV, distH);
-    this.go(new THREE.Vector3(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist), new THREE.Vector3(0, 1.4, -0.4), animate);
+    this.go(new THREE.Vector3(0, Math.sin(pitch) * dist, Math.cos(pitch) * dist), new THREE.Vector3(0, 1.2, 0.2), animate);
   }
 
   private focusDesk(id: string): void {

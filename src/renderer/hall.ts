@@ -85,7 +85,7 @@ function skyTexture(): THREE.CanvasTexture {
   return sky;
 }
 
-/** The modernist hall: concrete slab, glass curtain walls on two sides, oak slat wall, plants and a lounge. */
+/** The modernist hall: a closed room — concrete floor, plaster walls with a window band to the city, oak slat wall, plants and a lounge. */
 export class Hall {
   readonly group = new THREE.Group();
   private built: THREE.Object3D | null = null;
@@ -96,7 +96,7 @@ export class Hall {
     const { w: W, d: D } = hallSize(rows);
     const zBack = -D / 2;
     const zFront = D / 2;
-    const wallH = 6.9;
+    const wallH = 6.4;
     const frame = std(0x1e2329, 0.4, 0.55);
     const white = std(0xf1efea, 0.8);
     const add = (mesh: THREE.Object3D, shadow = true): THREE.Object3D => {
@@ -116,7 +116,7 @@ export class Hall {
       return m;
     };
 
-    // Slab with a polished-concrete top.
+    // Floor slab spans the whole footprint, wall thickness included. Nothing exists outside the building.
     const tex = concreteTexture().clone();
     tex.needsUpdate = true;
     tex.repeat.set(W / 6, D / 6);
@@ -126,42 +126,60 @@ export class Hall {
     slab.position.y = -0.25;
     add(slab, false);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), std(0x0e1217, 1));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.52;
-    ground.receiveShadow = true;
-    root.add(ground);
-
     // Brass inlays between desk rows.
     const brass = std(0xc9a45c, 0.35, 0.7);
     for (let r = 0; r < rows - 1; r++) add(box(W - 0.6, 0.012, 0.07, brass, 0, 0.006, (r + 0.5 - (rows - 1) / 2) * SPACING_Z), false);
 
-    // Back wall: low plinth, glass above, black mullions.
-    const n = Math.round(W / 3);
-    add(box(W + 0.6, 0.9, 0.3, white, 0, 0.45, zBack - 0.15));
-    add(box(W + 0.6, 0.26, 0.3, frame, 0, wallH, zBack - 0.15));
-    add(box(W, 0.08, 0.14, frame, 0, 4.5, zBack - 0.1));
-    for (let i = 0; i <= n; i++) add(box(0.12, wallH - 0.9, 0.18, frame, -W / 2 + (i * W) / n, 0.9 + (wallH - 0.9) / 2, zBack - 0.1));
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0xbcd4ee, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.2, depthWrite: false });
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(W, wallH - 0.9), glassMat);
-    pane.position.set(0, 0.9 + (wallH - 0.9) / 2, zBack - 0.08);
-    root.add(pane);
+    // Closed room: plaster walls on all four sides, ceiling left open for the camera. Local frame of each
+    // wall: runs along x, interior face at z = 0, body behind it (z < 0).
+    const plaster = std(0xf3f1ec, 0.9);
+    const oak = std(0xb98a59, 0.55);
+    const SILL = 1.0;
+    const HEAD = 5.0;
+    const MID = (SILL + HEAD) / 2;
+    const part = (g: THREE.Group, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number): void => {
+      g.add(box(w, h, d, mat, x, y, z));
+    };
+    const glazed = (len: number, glassLen: number): THREE.Group => {
+      const g = new THREE.Group();
+      part(g, len, SILL, 0.3, plaster, 0, SILL / 2, -0.15);
+      part(g, len, wallH - HEAD, 0.3, plaster, 0, (HEAD + wallH) / 2, -0.15);
+      const pier = (len - glassLen) / 2;
+      for (const s of [-1, 1]) part(g, pier, HEAD - SILL, 0.3, plaster, s * (glassLen / 2 + pier / 2), MID, -0.15);
+      const n = Math.max(2, Math.round(glassLen / 3));
+      for (let i = 0; i <= n; i++) part(g, 0.1, HEAD - SILL, 0.14, frame, -glassLen / 2 + (i * glassLen) / n, MID, -0.07);
+      part(g, glassLen, 0.07, 0.1, frame, 0, 3.1, -0.07);
+      part(g, glassLen, 0.06, 0.45, oak, 0, SILL + 0.03, 0.08);
 
-    // Right wall: the same glazing, running along z.
-    const nz = Math.round(D / 3);
-    add(box(0.3, 0.9, D + 0.6, white, W / 2 + 0.15, 0.45, 0));
-    add(box(0.3, 0.26, D + 0.6, frame, W / 2 + 0.15, wallH, 0));
-    add(box(0.14, 0.08, D, frame, W / 2 + 0.1, 4.5, 0));
-    for (let i = 0; i <= nz; i++) add(box(0.18, wallH - 0.9, 0.12, frame, W / 2 + 0.1, 0.9 + (wallH - 0.9) / 2, zBack + (i * D) / nz));
-    const pane2 = new THREE.Mesh(new THREE.PlaneGeometry(D, wallH - 0.9), glassMat);
-    pane2.rotation.y = -Math.PI / 2;
-    pane2.position.set(W / 2 + 0.08, 0.9 + (wallH - 0.9) / 2, 0);
-    root.add(pane2);
+      const view = skyTexture().clone();
+      view.needsUpdate = true;
+      view.repeat.set(glassLen / (HEAD - SILL) / 4, 1);
+      const scene = new THREE.Mesh(new THREE.PlaneGeometry(glassLen, HEAD - SILL), new THREE.MeshBasicMaterial({ map: view, toneMapped: false }));
+      scene.position.set(0, MID, -0.14);
+      g.add(scene);
+      const glass = new THREE.Mesh(new THREE.PlaneGeometry(glassLen, HEAD - SILL), new THREE.MeshStandardMaterial({ color: 0xbcd4ee, transparent: true, opacity: 0.07, roughness: 0.05, metalness: 0.2, depthWrite: false }));
+      glass.position.set(0, MID, -0.03);
+      g.add(glass);
+      return g;
+    };
+    const place = (g: THREE.Group, x: number, z: number, rotY: number): void => {
+      g.position.set(x, 0, z);
+      g.rotation.y = rotY;
+      add(g, false);
+    };
+    place(glazed(W + 0.6, W - 1.2), 0, zBack, 0);
+    place(glazed(D, D - 1.2), W / 2, 0, -Math.PI / 2);
+
+    // Front wall: a low parapet, so the room reads as closed without hiding the desks from the camera.
+    const parapet = new THREE.Group();
+    part(parapet, W + 0.6, 1.0, 0.3, plaster, 0, 0.5, -0.15);
+    part(parapet, W + 0.6, 0.06, 0.34, frame, 0, 1.03, -0.15);
+    place(parapet, 0, zFront, Math.PI);
 
     // Left wall: warm oak slats over a dark felt backing, with LED strips.
-    add(box(0.3, wallH, D + 0.6, std(0x2a2521, 1), -W / 2 - 0.15, wallH / 2, 0));
+    add(box(0.3, wallH, D, std(0x2a2521, 1), -W / 2 - 0.15, wallH / 2, 0), false);
     const slatCount = Math.floor(D / 0.26);
-    const slats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, wallH - 0.5, 0.15), std(0xb98a59, 0.55), slatCount);
+    const slats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, wallH - 0.5, 0.15), oak, slatCount);
     const m4 = new THREE.Matrix4();
     for (let i = 0; i < slatCount; i++) {
       m4.makeTranslation(-W / 2 + 0.06, (wallH - 0.5) / 2 + 0.1, zBack + 0.2 + i * 0.26);
@@ -213,17 +231,6 @@ export class Hall {
     plant(-W / 2 + 0.55, credZ + 2.2, 0.75, 0.83);
     plant(W / 2 - 1.0, 2.9, 0.9);
     plant(W / 2 - 1.0, -2.9, 0.9);
-
-    // Sky and skyline seen through the glass.
-    // City panorama just behind the glass: seen from above, rays through the windows land on these.
-    const backdrop = (width: number, x: number, z: number, rotY: number): void => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(width, 16), new THREE.MeshBasicMaterial({ map: skyTexture(), fog: false }));
-      m.position.set(x, 4.5, z);
-      m.rotation.y = rotY;
-      root.add(m);
-    };
-    backdrop(W + 70, 0, zBack - 5, 0);
-    backdrop(D + 40, W / 2 + 5, 0, -Math.PI / 2);
 
     this.group.add(root);
     this.built = root;
