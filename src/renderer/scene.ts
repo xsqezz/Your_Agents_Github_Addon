@@ -64,7 +64,7 @@ class Desk {
   private figureKey = '';
   private minis: { holder: THREE.Group; figure: Figure; key: string }[] = [];
   private rugMat = stdMat(0xddd8cf, 0.9, 0);
-  private glowMat = new THREE.MeshBasicMaterial({ color: 0xd2cec6 });
+  private glowMat = new THREE.MeshBasicMaterial({ color: 0xd2cec6, toneMapped: false });
   private shadeMat = new THREE.MeshBasicMaterial({ color: 0x3a3f47 });
   private color = new THREE.Color();
   private glow = new THREE.Color();
@@ -105,9 +105,9 @@ class Desk {
     rug.position.y = 0.025;
     rug.castShadow = false;
     g.add(rug);
-    for (const [w, d, x, z] of [[4.2, 0.07, 0, 1.965], [4.2, 0.07, 0, -1.965], [0.07, 4.0, 2.065, 0], [0.07, 4.0, -2.065, 0]] as const) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.012, d), this.glowMat);
-      bar.position.set(x, 0.055, z);
+    for (const [w, d, x, z] of [[4.2, 0.14, 0, 1.93], [4.2, 0.14, 0, -1.93], [0.14, 4.0, 2.03, 0], [0.14, 4.0, -2.03, 0]] as const) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), this.glowMat);
+      bar.position.set(x, 0.058, z);
       g.add(bar);
     }
     const num = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.31), new THREE.MeshBasicMaterial({ map: numberTexture(this.index + 1), transparent: true }));
@@ -284,9 +284,9 @@ class Desk {
     this.chair.rotation.y = this.swivel + this.tuck * 0.5;
 
     const attention = !!s && NEEDS_YOU.includes(s.state);
-    let amt = !s ? 0 : s.state === 'offline' ? 0.12 : s.state === 'idle' ? 0.3 : s.state === 'stalled' ? 0.4 : 0.85;
-    if (attention && !this.reduced) amt *= 0.65 + 0.35 * Math.sin(t * 5);
-    if ((this.hover || this.selected) && s) amt = Math.min(1, amt + 0.3);
+    let amt = !s ? 0 : s.state === 'offline' ? 0.12 : s.state === 'idle' ? 0.3 : s.state === 'stalled' ? 0.4 : 1;
+    if (attention && !this.reduced) amt *= 0.7 + 0.3 * Math.sin(t * 5);
+    if ((this.hover || this.selected) && s) amt = 1;
     this.glow.copy(NEUTRAL).lerp(this.color, amt);
     this.glowMat.color.copy(this.glow);
     this.rugMat.emissive.copy(this.color);

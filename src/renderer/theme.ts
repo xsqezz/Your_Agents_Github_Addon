@@ -2,13 +2,13 @@ import type { AgentState, SessionSummary, ToolCategory } from '../core/types.ts'
 
 export const STATE_COLOR: Record<AgentState, string> = {
   idle: '#6f86a3',
-  thinking: '#7db2ff',
+  thinking: '#3ddc97',
   tool: '#3ddc97',
   'awaiting-input': '#ffc247',
-  'awaiting-permission': '#ff8a3d',
-  compacting: '#b99bff',
+  'awaiting-permission': '#ffc247',
+  compacting: '#3ddc97',
   error: '#ff5a6e',
-  done: '#7be07b',
+  done: '#4da3ff',
   offline: '#3a4656',
   stalled: '#8f939c',
 };
