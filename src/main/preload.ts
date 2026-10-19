@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('ua', {
   controlSend: (id: string, command: unknown) => ipcRenderer.invoke('ua:control-send', id, command),
   launch: (request: unknown) => ipcRenderer.invoke('ua:launch', request),
   signIn: () => ipcRenderer.invoke('ua:sign-in'),
+  openInCopilot: (sessionId: string) => ipcRenderer.invoke('ua:open-in-copilot', sessionId),
+  openInCodex: (sessionId: string) => ipcRenderer.invoke('ua:open-in-codex', sessionId),
   winAction: (action: string) => ipcRenderer.send('ua:win', action),
   winResize: (edge: string | null) => ipcRenderer.send('ua:win-resize', edge),
   onWinState: (cb: (state: unknown) => void) => {

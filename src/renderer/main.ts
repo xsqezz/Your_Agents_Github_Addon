@@ -4,7 +4,7 @@ import type { ControlCommand, ControlResult, ControlState } from '../core/contro
 import type { LaunchResult } from '../core/launch.ts';
 import { initControl, renderControl } from './control.ts';
 import { initCredits } from './credits.ts';
-import { initLauncher, openLauncher, renderLauncher } from './launch.ts';
+import { initLauncher, openLauncher, renderLauncher, toast } from './launch.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
 import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
@@ -12,7 +12,7 @@ import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateTe
 declare global {
   interface Window {
     ua: {
-      info(): Promise<{ mode: 'live' | 'demo'; home: string }>;
+      info(): Promise<{ mode: 'live' | 'demo'; home: string; providers?: string[] }>;
       list(): Promise<Snapshot>;
       detail(id: string, since: number): Promise<SessionDetail | null>;
       onSummaries(cb: (snapshot: Snapshot) => void): void;
@@ -24,6 +24,8 @@ declare global {
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
       signIn(): Promise<LaunchResult>;
+      openInCopilot(sessionId: string): Promise<{ ok: boolean; error?: string }>;
+      openInCodex(sessionId: string): Promise<{ ok: boolean; error?: string }>;
       winAction(action: 'minimize' | 'maximize' | 'close'): void;
       winResize(edge: string | null): void;
       onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;
@@ -57,6 +59,7 @@ const store = {
   since: 0,
   mode: 'live' as 'live' | 'demo',
   home: '',
+  providers: [] as string[],
 };
 
 const stage = $('stage');
@@ -77,6 +80,14 @@ const currentRoom = (): RoomInfo | undefined => store.rooms.find((r) => r.id ===
 const selected = (): SessionSummary | undefined => store.all.find((s) => s.id === store.selectedId);
 const panelPx = (): number => (store.selectedId ? Math.min(440, Math.round(window.innerWidth * 0.46)) : 0);
 const roomsPx = (): number => (store.rooms.length > 1 ? $('rooms').offsetWidth + 12 : 0);
+
+function openCopilotLauncher(): void {
+  if (!currentRoom()?.canLaunch) {
+    toast('Start a task in the ChatGPT app to add it here.');
+    return;
+  }
+  openLauncher();
+}
 
 /* ───────────── top bar ───────────── */
 
@@ -102,6 +113,9 @@ function renderTopbar(): void {
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === store.view));
   ($('show-offline') as HTMLInputElement).checked = store.showOffline;
   $('overview').hidden = store.view !== '3d';
+  const newAgent = $<HTMLButtonElement>('new-agent');
+  newAgent.disabled = !currentRoom()?.canLaunch;
+  newAgent.title = currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the ChatGPT app to add it here';
 }
 
 function renderStatus(): void {
@@ -110,7 +124,7 @@ function renderStatus(): void {
   const seated = Math.min(vis.length, MIN_DESKS);
   const working = vis.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length;
   const unseated = Math.max(0, vis.length - MIN_DESKS);
-  const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${store.home}`;
+  const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${(store.providers.length ? store.providers.join(' + ') : store.home)}`;
   bar.replaceChildren(
     h('span', { class: 'live-dot' }),
     h('span', { text }),
@@ -293,9 +307,19 @@ function renderPanel(): void {
   const head = $('panel-head');
   const dot = h('i', { class: 'dot' });
   dot.style.background = STATE_COLOR[s.state];
+  const isCodex = s.provider === 'codex';
+  const openInApp = h('button', { class: 'btn small', text: isCodex ? 'Open in ChatGPT' : 'Open in Copilot', attrs: { type: 'button', title: isCodex ? 'Open this thread in the ChatGPT desktop app' : 'Open this session in the GitHub Copilot app' } });
+  openInApp.addEventListener('click', () => {
+    const opening = isCodex ? window.ua.openInCodex(s.id) : window.ua.openInCopilot(s.id);
+    void opening.then((r) => {
+      const appName = isCodex ? 'ChatGPT' : 'GitHub Copilot';
+      toast(r.ok ? `Opened this session in ${appName}.` : (r.error ?? `Could not open ${appName}.`), !r.ok);
+    }).catch(() => toast(`Could not open ${isCodex ? 'ChatGPT' : 'GitHub Copilot'}.`, true));
+  });
   head.replaceChildren(
     h('div', { class: 'ph-row' },
       h('h2', { text: s.title }),
+      openInApp,
       h('button', { class: 'icon-btn', text: '✕', attrs: { type: 'button', id: 'panel-close', 'aria-label': 'Close panel (Esc)' } })),
     h('div', { class: 'ph-state', attrs: { 'data-state': s.state } },
       dot, h('b', { text: `${STATE_ICON[s.state]} ${stateText(s)}` }), h('span', { text: s.state === 'offline' ? '' : s.activity })),
@@ -333,7 +357,7 @@ function renderInfo(s: SessionSummary): void {
   }
 
   const copy = h('button', { class: 'link-btn', text: 'Copy', attrs: { type: 'button' } });
-  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.id));
+  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.provider === 'codex' ? s.id.slice('codex:'.length) : s.id));
 
   const dl = h('dl', { class: 'kv' },
     ...kv('Status', `${stateText(s)}${s.state === 'offline' ? '' : ` since ${ago(s.stateSince, now)} ago`}`),
@@ -353,7 +377,7 @@ function renderInfo(s: SessionSummary): void {
     dl,
     h('section', { class: 'note' },
       h('h3', { text: 'Controls' }),
-      h('p', { text: 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
+      h('p', { text: s.provider === 'codex' ? 'History is read through the official local Codex App Server. Open this thread in the ChatGPT app to reply, stop the task or handle approval requests.' : 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
   );
 }
 
@@ -367,7 +391,7 @@ async function pollDetail(): Promise<void> {
     if (d && store.selectedId === id) {
       store.since = d.rev;
       mergeItems(d.items);
-      $('src').textContent = d.source ? 'live from events.jsonl' : 'no event log for this session';
+      $('src').textContent = d.source?.startsWith('Codex App Server') ? d.source : d.source ? 'live from events.jsonl' : 'no event log for this session';
     }
   } finally {
     pollBusy = false;
@@ -406,7 +430,7 @@ function render(): void {
     emptyEl.querySelector('h2')!.textContent = `All desks are free in ${currentRoom()?.name ?? 'this room'}`;
     emptyEl.querySelector('p')!.textContent = hidden
       ? `${hidden} past session${hidden > 1 ? 's are' : ' is'} hidden here. Turn on “Show offline” to seat them.`
-      : 'No agent has worked in this folder yet. Click a desk to start one.';
+      : currentRoom()?.provider === 'codex' ? 'No Codex task is listed here yet. Start or open one in the ChatGPT app.' : 'No agent has worked in this folder yet. Click a desk to start one.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
@@ -436,7 +460,7 @@ function cycle(dir: number): void {
 }
 
 function boot(): void {
-  scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openLauncher });
+  scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openCopilotLauncher });
   initControl(selected);
   initLauncher(currentRoom);
   initCredits();
@@ -467,7 +491,7 @@ function boot(): void {
       if (store.follow) $('tab-live').scrollTop = $('tab-live').scrollHeight;
     }
     if (t.closest('#overview')) scene.frameAll(true);
-    if (t.closest('#new-agent')) openLauncher();
+    if (t.closest('#new-agent')) openCopilotLauncher();
     const winBtn = t.closest<HTMLElement>('[data-win]');
     if (winBtn) window.ua.winAction(winBtn.dataset.win as 'minimize' | 'maximize' | 'close');
   });
@@ -506,7 +530,7 @@ function boot(): void {
     if (e.key === 'Escape') select(null);
     else if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      openLauncher();
+      openCopilotLauncher();
     } else if (e.key === 'ArrowRight') cycle(1);
     else if (e.key === 'ArrowLeft') cycle(-1);
     else if (e.key === 'PageDown' || (e.altKey && e.key === 'ArrowDown')) {
@@ -541,12 +565,13 @@ async function start(): Promise<void> {
   const info = await window.ua.info();
   store.mode = info.mode;
   store.home = info.home;
+  store.providers = info.providers ?? [];
   const snap = await window.ua.list();
   store.all = snap.sessions;
   store.rooms = snap.rooms;
   announce(store.all);
   render();
-  if (params.get('launch') === '1') setTimeout(openLauncher, 800);
+  if (params.get('launch') === '1') setTimeout(openCopilotLauncher, 800);
   const nums = (key: string): [number, number, number] | null => {
     const p = params.get(key)?.split(',').map(Number);
     return p && p.length === 3 && p.every(Number.isFinite) ? (p as [number, number, number]) : null;

@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Notification, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, screen, shell } from 'electron';
 import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
 import type { Controller } from '../core/control.ts';
 import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
 import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
+import { CodexSource, CombinedSource } from './codex.ts';
 import { CliLauncher, DemoLauncher, type Launcher } from './launcher.ts';
 import type { Source } from './source.ts';
 
@@ -203,7 +204,7 @@ app.whenReady().then(async () => {
     launcher = new DemoLauncher(() => control.state().enabled);
   } else {
     const live = new LiveSource(home);
-    source = live;
+    source = new CombinedSource(live, new CodexSource());
     control = new ControlServer({ copilotHome: home, bridgeSource: path.join(__dirname, 'bridge'), onChange: pushControl });
     launcher = new CliLauncher(live, () => control.state().enabled);
   }
@@ -218,6 +219,26 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
   ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
   ipcMain.handle('ua:sign-in', () => launcher.signIn());
+  ipcMain.handle('ua:open-in-copilot', async (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(sessionId)) return { ok: false, error: 'Invalid session ID.' };
+    try {
+      await shell.openExternal(`ghapp://sessions/${sessionId}`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `Could not open GitHub Copilot: ${(e as Error).message}` };
+    }
+  });
+  ipcMain.handle('ua:open-in-codex', async (_e, sessionId: unknown) => {
+    if (typeof sessionId !== 'string' || !sessionId.startsWith('codex:')) return { ok: false, error: 'Invalid Codex thread ID.' };
+    const id = sessionId.slice('codex:'.length);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: 'Invalid Codex thread ID.' };
+    try {
+      await shell.openExternal(`codex://threads/${id}`);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `Could not open ChatGPT: ${(e as Error).message}` };
+    }
+  });
   ipcMain.on('ua:win', (e, action: unknown) => {
     if (!win || e.sender !== win.webContents) return;
     if (action === 'minimize') win.minimize();

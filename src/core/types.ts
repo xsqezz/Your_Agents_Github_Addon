@@ -75,6 +75,7 @@ export interface RoomInfo {
   id: string;
   name: string;
   kind: 'project' | 'chats' | 'other';
+  provider?: 'copilot' | 'codex';
   /** A new agent can be started here (the room has a folder on disk). */
   canLaunch?: boolean;
 }
@@ -86,6 +87,7 @@ export interface Snapshot {
 
 export interface SessionSummary {
   id: string;
+  provider?: 'copilot' | 'codex';
   /** Room (project folder, "chats" or "other") the session belongs to. */
   room: string;
   title: string;

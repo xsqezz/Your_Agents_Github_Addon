@@ -6,11 +6,11 @@ product
 
 ## Users
 
-One power user who runs several GitHub Copilot agents in parallel (autopilot, orchestrated child sessions) and glances at a second monitor between tasks. Wants to know in two seconds which agent needs them, which is stuck and which is burning budget, then open any agent and follow its work live.
+One power user who runs several GitHub Copilot agents and local Codex tasks in parallel, then glances at a second monitor between tasks. Wants to know in two seconds which agent needs them, which is stuck and which is burning budget, then open any session in its original app and follow its work.
 
 ## Product Purpose
 
-A local, read-only "mission control" for the GitHub Copilot app, presented as a 3D office of toy robots. Success: a glance at the window answers "who is working, who is waiting for me, who failed"; a click gives the full detail and a live event stream. Control of agents (send, stop, answer, approve) comes later through an official extension bridge.
+A local, multi-provider "mission control" for GitHub Copilot and local ChatGPT Codex threads, presented as a 3D office of toy robots. Success: a glance at the window answers "who is working, who is waiting for me, who failed"; a click gives the available activity history and opens the original session. Copilot control uses its official extension bridge. Codex is read-only in ur-agents; replies, stop requests and approvals stay in the ChatGPT app.
 
 ## Brand Personality
 
