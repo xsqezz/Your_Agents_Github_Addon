@@ -22,6 +22,7 @@ declare global {
       controlUninstall(): Promise<ControlResult>;
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
+      signIn(): Promise<LaunchResult>;
       winAction(action: 'minimize' | 'maximize' | 'close'): void;
       winResize(edge: string | null): void;
       onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;

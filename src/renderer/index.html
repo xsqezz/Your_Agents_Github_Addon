@@ -119,7 +119,10 @@
           <input id="launch-name" type="text" maxlength="80" placeholder="Shown in the Copilot app" />
         </label>
         <p class="hint">It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.</p>
-        <p id="launch-error" class="error" role="alert"></p>
+        <div id="launch-error-box" class="errbox" hidden>
+          <p id="launch-error" class="error" role="alert"></p>
+          <button type="button" id="launch-signin" class="btn small primary" hidden>Sign in to Copilot</button>
+        </div>
         <footer>
           <button type="button" id="launch-cancel" class="btn">Cancel</button>
           <button type="submit" id="launch-go" class="btn primary">Start agent <kbd>Ctrl+Enter</kbd></button>

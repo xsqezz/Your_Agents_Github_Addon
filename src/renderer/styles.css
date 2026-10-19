@@ -243,8 +243,8 @@ body.has-rooms #statusbar { left: calc(var(--rooms-w) + 24px); }
 #launch .notice { padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #launch .notice p { margin: 0; font-size: 13px; color: var(--text); }
 #launch .hint { margin: 0; font-size: 12px; color: var(--muted); }
-#launch .error { margin: 0; min-height: 0; font-size: 13px; color: #ff7b8b; }
-#launch .error:empty { display: none; }
+#launch .error { margin: 0; font-size: 13px; color: #ff7b8b; }
+#launch .errbox { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #5a2a31; border-radius: 12px; background: #140b0d; }
 #launch footer { display: flex; justify-content: flex-end; gap: 10px; }
 #launch kbd { margin-left: 8px; font: 11px var(--mono); opacity: 0.6; }
 #toast { position: fixed; z-index: 20; left: 50%; bottom: 52px; transform: translateX(-50%); max-width: min(560px, 90vw); padding: 10px 16px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 12px; font-size: 13px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }

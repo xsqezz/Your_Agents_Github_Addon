@@ -45,6 +45,8 @@ Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / 
 
 Click a **free desk** (or press `N`, or use **New agent**) to start an agent in the current room's folder. Pick what it should do, the model (any id; common ones are suggested), reasoning effort, mode (normal, plan first, autopilot) and permissions, optionally a name. It runs the Copilot CLI one-shot (`copilot --prompt …`) in that folder, so it works until the task is done and then goes offline; open it in the GitHub Copilot app to continue. Permissions are `--allow-all-tools` (stays inside the folder) or, after an extra confirmation, `--allow-all`. Needs **Control** switched on, at most six started agents run at once, and the session is filed under its room through a small `launched.json` next to the bridge data.
 
+**Sign-in:** agents started from ur-agents run the Copilot CLI by themselves, so the CLI needs its own login. The GitHub Copilot app hands its login only to the sessions it starts, so if you have never run `copilot login`, the first start fails with "not signed in" and the dialog offers a **Sign in to Copilot** button (it opens the CLI's own device-code sign-in in a terminal). Do it once, then press Start again. A start counts as successful only when the agent has received its prompt; a failed one leaves nothing behind and its CLI output is kept in `%LOCALAPPDATA%\ur-agents\launches` for three days.
+
 ## What you see
 
 A desk is **taken** by every session of the room. While its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled it is awake at its monitors; **idle** and **offline** agents sit there asleep, and only desks without a session stay empty. Desks are numbered and keep their session for as long as it is listed.

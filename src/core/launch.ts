@@ -34,6 +34,8 @@ export interface LaunchResult {
   sessionId?: string;
   error?: string;
   note?: string;
+  /** The CLI has no login; the UI offers to open its sign-in. */
+  needsLogin?: boolean;
 }
 
 const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/;

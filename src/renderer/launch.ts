@@ -27,6 +27,12 @@ function fill(select: HTMLSelectElement, options: readonly (readonly [string, st
   select.replaceChildren(...options.map(([value, label]) => Object.assign(document.createElement('option'), { value, textContent: label })));
 }
 
+function showError(text: string, needsLogin = false): void {
+  $('launch-error').textContent = text;
+  $('launch-error-box').hidden = !text;
+  $('launch-signin').hidden = !needsLogin;
+}
+
 function refresh(): void {
   const room = getRoom();
   const state = controlState();
@@ -45,13 +51,14 @@ function refresh(): void {
   notice.firstElementChild!.textContent = text;
   $('launch-enable').hidden = !action;
   $<HTMLButtonElement>('launch-go').disabled = !!text || busy;
+  $<HTMLButtonElement>('launch-go').firstChild!.textContent = busy ? 'Starting… ' : 'Start agent ';
   for (const el of dlg.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea')) el.disabled = !room?.canLaunch || busy;
 }
 
 export function openLauncher(): void {
   const dlg = $<HTMLDialogElement>('launch');
   if (dlg.open) return;
-  $('launch-error').textContent = '';
+  showError('');
   refresh();
   $('scrim').hidden = false;
   // Not showModal(): a modal dialog would paint its backdrop outside the rounded window.
@@ -75,6 +82,12 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
 
   $('launch-cancel').addEventListener('click', () => dlg.close());
   $('launch-enable').addEventListener('click', () => requestEnable());
+  $('launch-signin').addEventListener('click', () => {
+    void window.ua.signIn().then((r) => {
+      if (!r.ok) showError(r.error ?? 'Could not open the sign-in.');
+      else toast('Finish the sign-in in the window that opened, then press Start agent again.');
+    });
+  });
   $('scrim').addEventListener('click', () => dlg.close());
   dlg.addEventListener('close', () => ($('scrim').hidden = true));
   dlg.addEventListener('keydown', (e) => {
@@ -91,7 +104,7 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
     if ($<HTMLSelectElement>('launch-access').value === 'full' && !confirm('Full access lets this agent read and write anywhere on your computer and open any URL, with no prompts.\n\nStart it anyway?')) return;
     busy = true;
     refresh();
-    $('launch-error').textContent = '';
+    showError('');
     try {
       const r = await window.ua.launch({
         room: room.id,
@@ -108,10 +121,10 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
         dlg.close();
         toast(r.note ?? `Agent started in ${room.name}. It takes a desk in a moment.`);
       } else {
-        $('launch-error').textContent = r.error ?? 'Could not start the agent.';
+        showError(r.error ?? 'Could not start the agent.', r.needsLogin);
       }
     } catch {
-      $('launch-error').textContent = 'Could not reach the app backend.';
+      showError('Could not reach the app backend.');
     } finally {
       busy = false;
       refresh();
