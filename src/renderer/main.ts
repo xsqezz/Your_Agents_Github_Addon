@@ -1,5 +1,6 @@
 import { FAMILY_LABEL } from '../core/family.ts';
-import type { AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
+import type { AgentProvider, AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
+import { PROVIDERS } from '../core/providers.ts';
 import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
 import type { LaunchResult } from '../core/launch.ts';
 import { initControl, renderControl } from './control.ts';
@@ -12,7 +13,7 @@ import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateTe
 declare global {
   interface Window {
     ua: {
-      info(): Promise<{ mode: 'live' | 'demo'; home: string; providers?: string[] }>;
+      info(): Promise<{ mode: 'live' | 'demo'; home: string; providerKeys?: AgentProvider[] }>;
       list(): Promise<Snapshot>;
       detail(id: string, since: number): Promise<SessionDetail | null>;
       onSummaries(cb: (snapshot: Snapshot) => void): void;
@@ -26,6 +27,7 @@ declare global {
       signIn(): Promise<LaunchResult>;
       openInCopilot(sessionId: string): Promise<{ ok: boolean; error?: string }>;
       openInCodex(sessionId: string): Promise<{ ok: boolean; error?: string }>;
+      openProviderApp(provider: AgentProvider): Promise<{ ok: boolean; error?: string }>;
       winAction(action: 'minimize' | 'maximize' | 'close'): void;
       winResize(edge: string | null): void;
       onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;
@@ -46,12 +48,17 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: { class?: strin
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const params = new URLSearchParams(location.search);
+type ProviderKey = AgentProvider;
+const providerKey = (value: string | null): ProviderKey | null => value && Object.prototype.hasOwnProperty.call(PROVIDERS, value) ? value as ProviderKey : null;
+const activeProvider: ProviderKey = providerKey(params.get('provider')) ?? (params.get('room')?.startsWith('codex:') ? 'codex' : null) ?? providerKey(localStorage.getItem('ua.provider')) ?? 'copilot';
+const initialRoom = params.get('room') ?? localStorage.getItem(`ua.room.${activeProvider}`) ?? (activeProvider === 'copilot' ? localStorage.getItem('ua.room') : null) ?? '';
 const store = {
   all: [] as SessionSummary[],
   rooms: [] as RoomInfo[],
-  room: params.get('room') ?? localStorage.getItem('ua.room') ?? '',
-  roomPinned: params.get('room') != null || localStorage.getItem('ua.room') != null,
+  room: initialRoom,
+  roomPinned: params.get('room') != null || initialRoom !== '',
   selectedId: null as string | null,
+  activeProvider,
   view: (params.get('view') ?? localStorage.getItem('ua.view') ?? '3d') as '3d' | 'list',
   showOffline: localStorage.getItem('ua.offline.v2') !== '0',
   tab: 'live' as 'live' | 'info',
@@ -59,7 +66,7 @@ const store = {
   since: 0,
   mode: 'live' as 'live' | 'demo',
   home: '',
-  providers: [] as string[],
+  availableProviders: [] as AgentProvider[],
 };
 
 const stage = $('stage');
@@ -71,17 +78,53 @@ let scene: OfficeScene;
 let announcedStates = new Map<string, AgentState>();
 let primed = false;
 
+const providerSessions = (): SessionSummary[] => store.mode === 'demo' ? store.all : store.all.filter((s) => (s.provider ?? 'copilot') === store.activeProvider);
+const providerRooms = (): RoomInfo[] => store.mode === 'demo' ? store.rooms : store.rooms.filter((r) => (r.provider ?? 'copilot') === store.activeProvider);
 const shown = (list: SessionSummary[]): SessionSummary[] => (store.showOffline ? list : list.filter((s) => s.state !== 'offline'));
 /** Agents in the room you are in. */
-const visible = (): SessionSummary[] => shown(store.all.filter((s) => s.room === store.room));
+const visible = (): SessionSummary[] => shown(providerSessions().filter((s) => s.room === store.room));
 /** Agents in every room (list view). */
-const visibleEverywhere = (): SessionSummary[] => shown(store.all);
-const currentRoom = (): RoomInfo | undefined => store.rooms.find((r) => r.id === store.room);
-const selected = (): SessionSummary | undefined => store.all.find((s) => s.id === store.selectedId);
+const visibleEverywhere = (): SessionSummary[] => shown(providerSessions());
+const currentRoom = (): RoomInfo | undefined => providerRooms().find((r) => r.id === store.room);
+const selected = (): SessionSummary | undefined => providerSessions().find((s) => s.id === store.selectedId);
 const panelPx = (): number => (store.selectedId ? Math.min(440, Math.round(window.innerWidth * 0.46)) : 0);
-const roomsPx = (): number => (store.rooms.length > 1 ? $('rooms').offsetWidth + 12 : 0);
+const roomsPx = (): number => (providerRooms().length > 1 ? $('rooms').offsetWidth + 12 : 0);
+
+let providerButtonsSig = '';
+
+function renderProviderSwitch(): void {
+  const box = $('provider-switch');
+  const providers = store.mode === 'demo' ? [] : store.availableProviders.filter((key) => Object.prototype.hasOwnProperty.call(PROVIDERS, key));
+  const sig = providers.join('|');
+  if (sig !== providerButtonsSig) {
+    providerButtonsSig = sig;
+    box.replaceChildren(...providers.map((key) => {
+      const button = h('button', { text: PROVIDERS[key].buttonLabel, attrs: { type: 'button', 'data-provider': key, title: `Show ${PROVIDERS[key].label} sessions` } });
+      return button;
+    }));
+  }
+  box.hidden = providers.length < 2;
+  for (const button of box.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.provider === store.activeProvider));
+  }
+}
+
+function providerLabel(provider: ProviderKey = store.activeProvider): string {
+  return PROVIDERS[provider].label;
+}
+
+function openProviderApp(provider: ProviderKey): void {
+  if (store.mode === 'demo' || !store.availableProviders.includes(provider)) return;
+  void window.ua.openProviderApp(provider).then((result) => {
+    if (!result.ok) toast(`Could not open ${providerLabel(provider)}. Start it from Windows and try again.`, true);
+  }).catch(() => toast(`Could not open ${providerLabel(provider)}. Start it from Windows and try again.`, true));
+}
 
 function openCopilotLauncher(): void {
+  if (store.mode !== 'demo' && store.activeProvider !== 'copilot') {
+    toast('Start a Codex Local or Worktree task in the ChatGPT app.');
+    return;
+  }
   if (!currentRoom()?.canLaunch) {
     toast('Start a task in the ChatGPT app to add it here.');
     return;
@@ -92,7 +135,7 @@ function openCopilotLauncher(): void {
 /* ───────────── top bar ───────────── */
 
 function renderTopbar(): void {
-  const all = store.all;
+  const all = providerSessions();
   const n = (f: (s: SessionSummary) => boolean) => all.filter(f).length;
   const chips: [string, string, number, AgentState][] = [
     ['Need you', 'awaiting-input', n((s) => NEEDS_YOU.includes(s.state)), 'awaiting-input'],
@@ -111,9 +154,13 @@ function renderTopbar(): void {
     }),
   );
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === store.view));
+  renderProviderSwitch();
+  $('control-option').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
+  $('credits').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
   ($('show-offline') as HTMLInputElement).checked = store.showOffline;
   $('overview').hidden = store.view !== '3d';
   const newAgent = $<HTMLButtonElement>('new-agent');
+  newAgent.hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
   newAgent.disabled = !currentRoom()?.canLaunch;
   newAgent.title = currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the ChatGPT app to add it here';
 }
@@ -124,7 +171,7 @@ function renderStatus(): void {
   const seated = Math.min(vis.length, MIN_DESKS);
   const working = vis.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length;
   const unseated = Math.max(0, vis.length - MIN_DESKS);
-  const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · watching ${(store.providers.length ? store.providers.join(' + ') : store.home)}`;
+  const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · ${providerLabel()}`;
   bar.replaceChildren(
     h('span', { class: 'live-dot' }),
     h('span', { text }),
@@ -137,7 +184,7 @@ function renderStatus(): void {
 /* ───────────── rooms ───────────── */
 
 const roomStats = (id: string): { needs: number; working: number; total: number } => {
-  const list = store.all.filter((s) => s.room === id);
+  const list = providerSessions().filter((s) => s.room === id);
   return {
     needs: list.filter((s) => NEEDS_YOU.includes(s.state)).length,
     working: list.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length,
@@ -149,11 +196,12 @@ let roomsSig = '';
 
 function renderRooms(): void {
   const box = $('rooms');
-  const multi = store.rooms.length > 1;
+  const rooms = providerRooms();
+  const multi = rooms.length > 1;
   box.hidden = !multi;
   document.body.classList.toggle('has-rooms', multi);
   if (!multi) return;
-  const sig = store.rooms
+  const sig = rooms
     .map((r) => {
       const st = roomStats(r.id);
       return `${r.id}:${r.name}:${st.needs}:${st.working}:${r.id === store.room ? 1 : 0}`;
@@ -162,7 +210,7 @@ function renderRooms(): void {
   if (sig === roomsSig) return;
   roomsSig = sig;
   const hadFocus = box.contains(document.activeElement);
-  const rows = store.rooms.map((r) => {
+  const rows = rooms.map((r) => {
     const st = roomStats(r.id);
     const btn = h(
       'button',
@@ -175,7 +223,7 @@ function renderRooms(): void {
     return h('li', {}, btn);
   });
   $('room-list').replaceChildren(...rows);
-  $('rooms-count').textContent = String(store.rooms.length);
+  $('rooms-count').textContent = String(rooms.length);
   const cur = $('room-list').querySelector<HTMLElement>('[aria-current="true"]');
   cur?.scrollIntoView({ block: 'nearest' });
   if (hadFocus) cur?.focus({ preventScroll: true });
@@ -183,25 +231,51 @@ function renderRooms(): void {
 
 /** Moves to another room (the agent panel closes unless the selected agent lives there). */
 function switchRoom(id: string, keepSelection = false): void {
-  if (id === store.room || !store.rooms.some((r) => r.id === id)) return;
+  if (id === store.room || !providerRooms().some((r) => r.id === id)) return;
   store.room = id;
   store.roomPinned = true;
-  localStorage.setItem('ua.room', id);
+  localStorage.setItem(`ua.room.${store.activeProvider}`, id);
+  if (store.activeProvider === 'copilot') localStorage.setItem('ua.room', id);
   if (!keepSelection) select(null);
   render();
 }
 
+function switchProvider(provider: ProviderKey): void {
+  if (provider === store.activeProvider) {
+    openProviderApp(provider);
+    return;
+  }
+  if (!store.availableProviders.includes(provider)) return;
+  store.activeProvider = provider;
+  localStorage.setItem('ua.provider', provider);
+  store.room = localStorage.getItem(`ua.room.${provider}`) ?? '';
+  store.roomPinned = store.room !== '';
+  store.selectedId = null;
+  store.since = 0;
+  store.follow = true;
+  timelineEls.clear();
+  timelineBox = $('timeline') as HTMLOListElement;
+  timelineBox.replaceChildren();
+  roomsSig = '';
+  scene.setSelected(null, panelPx());
+  render();
+  scene.frameAll(true);
+  openProviderApp(provider);
+}
+
 function stepRoom(dir: number): void {
-  if (store.rooms.length < 2) return;
-  const i = store.rooms.findIndex((r) => r.id === store.room);
-  switchRoom(store.rooms[(i + dir + store.rooms.length) % store.rooms.length].id);
+  const rooms = providerRooms();
+  if (rooms.length < 2) return;
+  const i = rooms.findIndex((r) => r.id === store.room);
+  switchRoom(rooms[(i + dir + rooms.length) % rooms.length].id);
 }
 
 /** Picks the first room to show: the saved/pinned one, else the room where something is going on. */
 function pickRoom(): void {
-  if (store.rooms.some((r) => r.id === store.room)) return;
-  const hot = store.rooms.find((r) => roomStats(r.id).needs > 0) ?? store.rooms.find((r) => roomStats(r.id).working > 0) ?? store.rooms.find((r) => roomStats(r.id).total > 0);
-  store.room = (hot ?? store.rooms[0])?.id ?? '';
+  const rooms = providerRooms();
+  if (rooms.some((r) => r.id === store.room)) return;
+  const hot = rooms.find((r) => roomStats(r.id).needs > 0) ?? rooms.find((r) => roomStats(r.id).working > 0) ?? rooms.find((r) => roomStats(r.id).total > 0);
+  store.room = (hot ?? rooms[0])?.id ?? '';
 }
 
 /* ───────────── list view ───────────── */
@@ -402,7 +476,8 @@ async function pollDetail(): Promise<void> {
 
 function select(id: string | null): void {
   if (id === store.selectedId) return;
-  const target = id ? store.all.find((s) => s.id === id) : undefined;
+  const target = id ? providerSessions().find((s) => s.id === id) : undefined;
+  if (id && !target) return;
   if (target && target.room !== store.room) switchRoom(target.room);
   store.selectedId = id;
   store.since = 0;
@@ -426,11 +501,11 @@ function render(): void {
   scene.setSessions(vis, store.room, currentRoom()?.name ?? '');
   emptyEl.hidden = vis.length > 0 || store.view !== '3d';
   if (!vis.length) {
-    const hidden = store.all.filter((s) => s.room === store.room).length;
-    emptyEl.querySelector('h2')!.textContent = `All desks are free in ${currentRoom()?.name ?? 'this room'}`;
+    const hidden = providerSessions().filter((s) => s.room === store.room).length;
+    emptyEl.querySelector('h2')!.textContent = currentRoom() ? `All desks are free in ${currentRoom()!.name}` : `No ${providerLabel()} sessions yet`;
     emptyEl.querySelector('p')!.textContent = hidden
       ? `${hidden} past session${hidden > 1 ? 's are' : ' is'} hidden here. Turn on “Show offline” to seat them.`
-      : currentRoom()?.provider === 'codex' ? 'No Codex task is listed here yet. Start or open one in the ChatGPT app.' : 'No agent has worked in this folder yet. Click a desk to start one.';
+      : store.activeProvider === 'codex' ? 'Start a Codex Local or Worktree task in ChatGPT; it will appear here.' : 'No agent has worked in this folder yet. Click a desk to start one.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
@@ -441,7 +516,7 @@ function render(): void {
 }
 
 function announce(list: SessionSummary[]): void {
-  for (const s of list) {
+  for (const s of list.filter((item) => store.mode === 'demo' || (item.provider ?? 'copilot') === store.activeProvider)) {
     const prev = announcedStates.get(s.id);
     announcedStates.set(s.id, s.state);
     if (primed && prev !== s.state && NEEDS_YOU.includes(s.state)) {
@@ -472,6 +547,8 @@ function boot(): void {
     if (open?.dataset.id) select(open.dataset.id);
     const room = t.closest<HTMLElement>('[data-room]');
     if (room?.dataset.room) switchRoom(room.dataset.room);
+    const provider = providerKey(t.closest<HTMLElement>('[data-provider]')?.dataset.provider ?? null);
+    if (provider) switchProvider(provider);
     if (t.closest('#panel-close')) select(null);
     const view = t.closest<HTMLElement>('[data-view]');
     if (view) {
@@ -552,7 +629,11 @@ function boot(): void {
     announce(snap.sessions);
     render();
   });
-  window.ua.onFocus((id) => select(id));
+  window.ua.onFocus((id) => {
+    const target = store.all.find((s) => s.id === id);
+    if (target?.provider && target.provider !== store.activeProvider) switchProvider(target.provider);
+    select(id);
+  });
   setInterval(() => void pollDetail(), 600);
   setInterval(() => {
     if (store.view === 'list') renderList();
@@ -565,13 +646,20 @@ async function start(): Promise<void> {
   const info = await window.ua.info();
   store.mode = info.mode;
   store.home = info.home;
-  store.providers = info.providers ?? [];
+  store.availableProviders = info.providerKeys ?? [];
+  if (!store.availableProviders.includes(store.activeProvider) && store.availableProviders.length) {
+    store.activeProvider = store.availableProviders[0];
+    store.room = localStorage.getItem(`ua.room.${store.activeProvider}`) ?? '';
+  }
+  localStorage.setItem('ua.provider', store.activeProvider);
+  if (store.activeProvider === 'copilot' && store.room) localStorage.setItem('ua.room.copilot', store.room);
   const snap = await window.ua.list();
   store.all = snap.sessions;
   store.rooms = snap.rooms;
   announce(store.all);
   render();
-  if (params.get('launch') === '1') setTimeout(openCopilotLauncher, 800);
+  if (store.mode !== 'demo') openProviderApp(store.activeProvider);
+  if (params.get('launch') === '1' && store.activeProvider === 'copilot') setTimeout(openCopilotLauncher, 800);
   const nums = (key: string): [number, number, number] | null => {
     const p = params.get(key)?.split(',').map(Number);
     return p && p.length === 3 && p.every(Number.isFinite) ? (p as [number, number, number]) : null;

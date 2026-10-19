@@ -67,6 +67,8 @@ body.maximized .wbtn .ico-restore { display: block; }
 #topbar > * { white-space: nowrap; flex: none; }
 #topbar #counts { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow: hidden; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: 0.01em; }
+.provider-choice { display: inline-flex; align-items: center; gap: 7px; }
+.provider-caption { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; }
 .brand-mark { width: 16px; height: 16px; border-radius: 5px; background: #ffffff; box-shadow: inset 3px -3px 0 rgba(0, 0, 0, 0.14); position: relative; }
 .brand-mark::before, .brand-mark::after { content: ""; position: absolute; top: 5px; width: 2px; height: 4px; background: #050505; }
 .brand-mark::before { left: 4px; } .brand-mark::after { right: 4px; }

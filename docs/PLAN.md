@@ -81,6 +81,8 @@ flowchart LR
 
 Codex App Server jest uruchamiany lokalnie przez ur-agents z CLI dołączonego do aplikacji ChatGPT (lub z `PATH`). Osobny proces może pokazać zapisane wątki i historię, ale nie widzi aktywnego stanu sesji, którą aplikacja ChatGPT już załadowała we własnym procesie. Dlatego status takiego wątku może tu wyglądać na zapisany/nieaktywny; oryginalny wątek można otworzyć przyciskiem **Open in ChatGPT**.
 
+Wybór dostawcy w górnym pasku przełącza pokoje, liczniki, sesje i panel na Copilot albo Codex; pozostałe źródło nie miesza się do bieżącego widoku. Rejestr `AgentProvider` definiuje etykietę i oficjalny link uruchamiający aplikację towarzyszącą (`ghapp://sessions` lub `codex://threads`), dzięki czemu wybór otwiera albo aktywuje właściwą aplikację. Nowe źródło można dodać w rejestrze i warstwie dostawcy; Claude Code nie jest obecnie obsługiwany.
+
 Zasady:
 
 - **Czytanie jest read-only:** bazy `readOnly`; zapytania tylko z rejestru (allowlista tabel/kolumn); nigdy `accounts`, `settings`, `run/*.token`, `mcp-config.json`.
