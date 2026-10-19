@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, validateCommand } from './protocol.mjs';
+import { PROTOCOL_VERSION, reduceQuota, validateCommand } from './protocol.mjs';
 
 const sleep = (ms, signal) =>
   new Promise((resolve) => {
@@ -22,11 +22,12 @@ function describePermission(req) {
  *
  * `readConfig()` returns { port, token } while the app is running, otherwise null.
  */
-export function createBridge(session, { readConfig, fetchImpl = globalThis.fetch, log = () => {}, retryMs = 4000, idleMs = 5000, pollTimeoutMs = 40000 }) {
+export function createBridge(session, { readConfig, fetchImpl = globalThis.fetch, log = () => {}, retryMs = 4000, idleMs = 5000, pollTimeoutMs = 40000, quotaMs = 120000 }) {
   const permissions = new Map();
   const inputs = new Map();
   let stopped = false;
   let pushTimer = null;
+  let quotaTimer = null;
   let current = null;
   const ac = new AbortController();
 
@@ -115,6 +116,18 @@ export function createBridge(session, { readConfig, fetchImpl = globalThis.fetch
     return { ok: false, error: 'unsupported' };
   }
 
+  /** The account's AI-credit budget is read through this session's own login and handed to the app. */
+  async function pushQuota() {
+    const cfg = current;
+    if (!cfg || typeof session.rpc?.quota?.get !== 'function') return;
+    try {
+      const quota = reduceQuota(await session.rpc.quota.get());
+      if (quota) await post(cfg, '/b/quota', { sessionId: session.sessionId, quota });
+    } catch (e) {
+      log(`bridge: quota ${e?.message ?? e}`);
+    }
+  }
+
   async function run() {
     while (!stopped) {
       const cfg = readConfig();
@@ -127,6 +140,7 @@ export function createBridge(session, { readConfig, fetchImpl = globalThis.fetch
         const hello = await post(cfg, '/b/hello', { sessionId: session.sessionId, protocol: PROTOCOL_VERSION, ...snapshot() });
         if (!hello.ok) throw new Error(`hello ${hello.status}`);
         current = cfg;
+        void pushQuota();
         while (!stopped) {
           const r = await fetchImpl(url(cfg, `/b/poll?sid=${encodeURIComponent(session.sessionId)}`), { headers: headers(cfg), signal: AbortSignal.timeout(pollTimeoutMs) });
           if (r.status === 204) continue;
@@ -146,11 +160,15 @@ export function createBridge(session, { readConfig, fetchImpl = globalThis.fetch
   return {
     start() {
       void run();
+      // Jittered so sessions started together do not all ask GitHub at once.
+      quotaTimer = setInterval(() => void pushQuota(), quotaMs + Math.floor(Math.random() * 20000));
+      quotaTimer.unref?.();
     },
     stop() {
       stopped = true;
       ac.abort();
       if (pushTimer) clearTimeout(pushTimer);
+      if (quotaTimer) clearInterval(quotaTimer);
       for (const off of offs) if (typeof off === 'function') off();
     },
     execute,

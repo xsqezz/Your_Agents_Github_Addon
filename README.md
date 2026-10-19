@@ -73,6 +73,12 @@ A working agent sits with its back to you, facing its monitors. When it needs yo
 
 All figures share one body — a chunky vinyl-toy block with two glossy oval eyes, stubby side nubs and four short legs — and differ by colour and emblem (printed on the chest and on the back, so you can tell them apart while they face their screens): `claude-*` orange with a starburst, `gpt-*`/codex teal with a six-petal rosette, `gemini-*` rainbow gradient with a four-point sparkle, `grok-*` graphite with a slashed ring and "GROK", `mai-*` white with four coloured squares, `auto` (GitHub Copilot's automatic model selection) dark graphite with the white GitHub mark, anything else grey. The emblems are simple glyphs drawn in code, not the companies' official logos, except the GitHub mark, which is the MIT-licensed Octicon. The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
 
+## Monthly AI credits
+
+The bottom of the Rooms list shows your **monthly AI-credit budget**: credits used out of the total, what is left, and when it resets. The total includes your plan's **additional budget** (the extra credits you allow beyond the included ones): the bar shows the included part solid and the additional part striped, with a tick where the included credits end. It turns yellow at 80 % and red at 95 % of the whole budget and says "Limit reached" when both are used up.
+
+The numbers come from `session.rpc.quota.get()`, which only a Copilot session can call with your login, so the **bridge** (see below) reports them: every ~2 minutes while a session with the bridge is open, and once when it connects. This needs no Control switch, only the bridge installed in `~/.copilot/extensions` (the card offers to install or update it). The last report is kept in `%LOCALAPPDATA%\ur-agents\quota.json`, so the card is filled right after the app starts and marks itself stale when it is old. The reset date is the first of next month (UTC) unless the runtime reports one, and a reset estimated that way is shown with `~`. If your plan has an additional budget of 0 it says "no additional budget". Demo mode shows synthetic numbers (`UR_DEMO_QUOTA=ok|warn|extra|none`).
+
 ## Controlling agents
 
 ur-agents can also **drive** your sessions, so the GitHub Copilot app can stay in the background:

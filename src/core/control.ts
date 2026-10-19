@@ -1,3 +1,5 @@
+import type { Quota } from './quota.ts';
+
 export interface PendingItem {
   kind: 'permission' | 'input';
   requestId: string;
@@ -20,6 +22,8 @@ export interface ControlState {
   demo: boolean;
   installDir: string;
   sessions: Record<string, ControlSession>;
+  /** The account's monthly AI-credit budget, as last reported by any session's bridge. */
+  quota?: Quota;
 }
 
 export type ControlCommand =
