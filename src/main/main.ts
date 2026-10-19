@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, Notification, screen, shell } from 'electron';
-import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
+import type { AgentProvider, AgentState, SessionSummary, Snapshot } from '../core/types.ts';
+import { PROVIDERS } from '../core/providers.ts';
 import type { Controller } from '../core/control.ts';
 import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
@@ -86,7 +87,8 @@ function notifyAttention(list: SessionSummary[]): void {
     if (!primed || prev === s.state || !ATTENTION.includes(s.state) || !s.live) continue;
     if (win?.isFocused() || !Notification.isSupported()) continue;
     const body = s.state === 'awaiting-permission' ? `Needs permission — ${s.activity}` : s.state === 'awaiting-input' ? `Asks: ${s.activity}` : `Error: ${s.activity}`;
-    const n = new Notification({ title: s.title, body: body.slice(0, 200) });
+    const source = s.provider === 'codex' ? 'Codex' : s.provider === 'copilot' ? 'Copilot' : 'Agent';
+    const n = new Notification({ title: `${source} · ${s.title}`, body: body.slice(0, 200) });
     n.on('click', () => {
       win?.show();
       win?.focus();
@@ -226,6 +228,15 @@ app.whenReady().then(async () => {
       return { ok: true };
     } catch (e) {
       return { ok: false, error: `Could not open GitHub Copilot: ${(e as Error).message}` };
+    }
+  });
+  ipcMain.handle('ua:open-provider-app', async (_e, provider: unknown) => {
+    if (provider !== 'copilot' && provider !== 'codex') return { ok: false, error: 'Unsupported provider.' };
+    try {
+      await shell.openExternal(PROVIDERS[provider].appUrl);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `Could not open ${PROVIDERS[provider].label}: ${(e as Error).message}` };
     }
   });
   ipcMain.handle('ua:open-in-codex', async (_e, sessionId: unknown) => {

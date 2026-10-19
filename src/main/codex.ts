@@ -354,7 +354,7 @@ export class CodexSource implements Source {
   private lastJson = '';
 
   info(): SourceInfo {
-    return { mode: 'live', home: process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), providers: ['ChatGPT (Codex App Server)'] };
+    return { mode: 'live', home: process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), providers: ['ChatGPT (Codex App Server)'], providerKeys: ['codex'] };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
@@ -570,7 +570,12 @@ export class CombinedSource implements Source {
   info(): SourceInfo {
     const copilot = this.copilot.info();
     const codex = this.codex.info();
-    return { mode: copilot.mode, home: copilot.home, providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)'])] };
+    return {
+      mode: copilot.mode,
+      home: copilot.home,
+      providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)'])],
+      providerKeys: [...new Set([...(copilot.providerKeys ?? ['copilot']), ...(codex.providerKeys ?? ['codex'])])],
+    };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {

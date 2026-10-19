@@ -129,7 +129,7 @@ export class LiveSource implements Source, LaunchTarget {
   }
 
   info(): SourceInfo {
-    return { mode: 'live', home: this.home, providers: ['GitHub Copilot'] };
+    return { mode: 'live', home: this.home, providers: ['GitHub Copilot'], providerKeys: ['copilot'] };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
@@ -254,9 +254,9 @@ export class LiveSource implements Source, LaunchTarget {
   }
 
   private rooms(used: Set<string>): RoomInfo[] {
-    const rooms: RoomInfo[] = this.projects.map((p) => ({ id: p.id, name: p.name, kind: 'project', canLaunch: dirExists(p.dir) }));
-    rooms.push({ id: CHATS_ROOM, name: 'Chats', kind: 'chats', canLaunch: dirExists(path.join(this.home, 'chats')) });
-    if (used.has(OTHER_ROOM)) rooms.push({ id: OTHER_ROOM, name: 'Other sessions', kind: 'other', canLaunch: false });
+    const rooms: RoomInfo[] = this.projects.map((p) => ({ id: p.id, name: p.name, kind: 'project', provider: 'copilot', canLaunch: dirExists(p.dir) }));
+    rooms.push({ id: CHATS_ROOM, name: 'Chats', kind: 'chats', provider: 'copilot', canLaunch: dirExists(path.join(this.home, 'chats')) });
+    if (used.has(OTHER_ROOM)) rooms.push({ id: OTHER_ROOM, name: 'Other sessions', kind: 'other', provider: 'copilot', canLaunch: false });
     return rooms;
   }
 

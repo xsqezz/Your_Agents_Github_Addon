@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { AgentProvider } from '../core/types.ts';
 
 contextBridge.exposeInMainWorld('ua', {
   info: () => ipcRenderer.invoke('ua:info'),
@@ -13,6 +14,7 @@ contextBridge.exposeInMainWorld('ua', {
   signIn: () => ipcRenderer.invoke('ua:sign-in'),
   openInCopilot: (sessionId: string) => ipcRenderer.invoke('ua:open-in-copilot', sessionId),
   openInCodex: (sessionId: string) => ipcRenderer.invoke('ua:open-in-codex', sessionId),
+  openProviderApp: (provider: AgentProvider) => ipcRenderer.invoke('ua:open-provider-app', provider),
   winAction: (action: string) => ipcRenderer.send('ua:win', action),
   winResize: (edge: string | null) => ipcRenderer.send('ua:win-resize', edge),
   onWinState: (cb: (state: unknown) => void) => {

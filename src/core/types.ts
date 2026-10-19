@@ -13,6 +13,8 @@ export type AgentState =
   | 'stalled';
 
 export type ToolCategory = 'shell' | 'read' | 'write' | 'web' | 'task' | 'input' | 'other';
+/** Providers with a session source and an official desktop-app launch target. */
+export type AgentProvider = 'copilot' | 'codex';
 
 export interface RawEvent {
   type: string;
@@ -75,7 +77,7 @@ export interface RoomInfo {
   id: string;
   name: string;
   kind: 'project' | 'chats' | 'other';
-  provider?: 'copilot' | 'codex';
+  provider?: AgentProvider;
   /** A new agent can be started here (the room has a folder on disk). */
   canLaunch?: boolean;
 }
@@ -87,7 +89,7 @@ export interface Snapshot {
 
 export interface SessionSummary {
   id: string;
-  provider?: 'copilot' | 'codex';
+  provider?: AgentProvider;
   /** Room (project folder, "chats" or "other") the session belongs to. */
   room: string;
   title: string;
