@@ -4,18 +4,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { familyOf, tierOf } from '../core/family.ts';
-import { safeText, truncate } from '../core/redact.ts';
+import { redact, safeText, truncate } from '../core/redact.ts';
 import type { AgentState, FeedItem, FocusInfo, RoomInfo, SessionDetail, SessionSummary, Snapshot, SubAgentInfo, TimelineItem, ToolCategory } from '../core/types.ts';
 import type { Source, SourceInfo } from './source.ts';
 
 const POLL_MS = 2500;
+const REPAIR_SCAN_MS = 30_000;
 const DETAIL_CACHE_MS = 2500;
-const MAX_THREADS = 140;
 const MAX_TURNS = 24;
 const MAX_ITEMS = 500;
 const DONE_VISIBLE_MS = 5 * 60_000;
 const SOURCE_KINDS = ['cli', 'vscode', 'exec', 'appServer', 'subAgent', 'subAgentReview', 'subAgentCompact', 'subAgentThreadSpawn', 'subAgentOther', 'unknown'];
 const CODEX_ID = 'codex:';
+const CODEX_ALL_ROOM = 'codex:all';
 
 type RpcError = { code?: number; message?: string };
 type RpcMessage = { id?: number; result?: unknown; error?: RpcError; method?: string; params?: unknown };
@@ -161,7 +162,7 @@ class AppServerClient {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Codex App Server request timed out (${method}).`));
-      }, 12_000);
+      }, method === 'thread/list' && params.useStateDbOnly === false ? 60_000 : 12_000);
       this.pending.set(id, { resolve: (v) => resolve(v as T), reject, timer });
       try {
         child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
@@ -348,6 +349,7 @@ export class CodexSource implements Source {
   private threads = new Map<string, CodexThread>();
   private details = new Map<string, DetailCache>();
   private stateSince = new Map<string, { state: AgentState; at: number }>();
+  private lastRepairScanAt = 0;
   private timer: NodeJS.Timeout | null = null;
   private busy = false;
   private onUpdate: (snapshot: Snapshot) => void = () => {};
@@ -390,7 +392,11 @@ export class CodexSource implements Source {
       await this.client.connect();
       const all: CodexThread[] = [];
       let cursor: string | undefined;
-      for (let page = 0; page < 3; page++) {
+      const cursors = new Set<string>();
+      const now = Date.now();
+      const scanRepair = now - this.lastRepairScanAt >= REPAIR_SCAN_MS;
+      if (scanRepair) this.lastRepairScanAt = now;
+      while (true) {
         const result = await this.client.request<ThreadPage>('thread/list', {
           cursor,
           limit: 100,
@@ -398,17 +404,29 @@ export class CodexSource implements Source {
           sortDirection: 'desc',
           sourceKinds: SOURCE_KINDS,
           archived: false,
-          useStateDbOnly: true,
+          // Periodic scan/repair finds named Worktree threads omitted from the fast state-DB path.
+          useStateDbOnly: !scanRepair,
         });
         all.push(...(result.data ?? []));
-        if (!result.nextCursor || !result.data?.length) break;
-        cursor = result.nextCursor;
+        const nextCursor = result.nextCursor;
+        if (!nextCursor || !result.data?.length || cursors.has(nextCursor)) break;
+        cursors.add(nextCursor);
+        cursor = nextCursor;
       }
-      const available = all.filter((thread) => !!thread.id && !thread.ephemeral).sort((a, b) => {
+      const available = all.filter((thread) => !!thread.id).sort((a, b) => {
         const active = Number(b.status?.type === 'active') - Number(a.status?.type === 'active');
         return active || timestamp(b.recencyAt ?? b.updatedAt ?? b.createdAt) - timestamp(a.recencyAt ?? a.updatedAt ?? a.createdAt);
-      }).slice(0, MAX_THREADS);
-      this.threads = new Map(available.map((thread) => [thread.id, thread]));
+      });
+      if (scanRepair) {
+        this.threads = new Map(available.map((thread) => [thread.id, thread]));
+      } else {
+        const refreshed = new Map(available.map((thread) => [thread.id, thread]));
+        for (const thread of this.threads.values()) if (!refreshed.has(thread.id)) refreshed.set(thread.id, thread);
+        this.threads = new Map([...refreshed.values()].sort((a, b) => {
+          const active = Number(b.status?.type === 'active') - Number(a.status?.type === 'active');
+          return active || timestamp(b.recencyAt ?? b.updatedAt ?? b.createdAt) - timestamp(a.recencyAt ?? a.updatedAt ?? a.createdAt);
+        }).map((thread) => [thread.id, thread]));
+      }
       this.publish(Date.now());
     } catch (error) {
       // Keep the last good view while the bundled CLI restarts or the local server is unavailable.
@@ -475,19 +493,18 @@ export class CodexSource implements Source {
     const rows = [...this.threads.values()];
     const byId = new Map(rows.map((thread) => [thread.id, thread]));
     const children = new Map<string, CodexThread[]>();
-    const roots = rows.filter((thread) => {
+    for (const thread of rows) {
       const parent = thread.parentThreadId;
       if (parent && byId.has(parent)) {
         const list = children.get(parent) ?? [];
         list.push(thread);
         children.set(parent, list);
-        return false;
       }
-      return true;
-    });
+    }
     const rooms = new Map<string, RoomInfo>();
+    rooms.set(CODEX_ALL_ROOM, { id: CODEX_ALL_ROOM, name: 'All Codex threads', kind: 'chats', provider: 'codex', canLaunch: false });
     const sessions: SessionSummary[] = [];
-    for (const thread of roots) {
+    for (const thread of rows) {
       const room = pathRoom(thread.cwd);
       rooms.set(room.id, { ...room, provider: 'codex', canLaunch: false });
       const id = `${CODEX_ID}${thread.id}`;
@@ -516,7 +533,7 @@ export class CodexSource implements Source {
       const feed: FeedItem[] = (cache?.items.slice(-9) ?? []).map((item) => ({ ts: item.ts, kind: item.kind, category: item.category, status: item.status, title: item.title, text: firstLine(item.body ?? item.title) }));
       const focusItem = cache?.items.slice().reverse().find((item) => item.kind === 'tool' && item.status === 'running') ?? cache?.items.slice().reverse().find((item) => item.kind === 'tool' || item.kind === 'assistant' || item.kind === 'subagent');
       const focus: FocusInfo | undefined = focusItem ? { kind: focusItem.kind, category: focusItem.category, status: focusItem.status, title: focusItem.title, text: truncate(focusItem.body ?? '', 1100), ts: focusItem.ts } : undefined;
-      const title = safeText(thread.name?.trim() || firstLine(thread.preview || '') || project || thread.id.slice(0, 8), 180);
+      const title = redact(thread.name?.trim() || firstLine(thread.preview || '') || project || thread.id.slice(0, 8));
       const summary: SessionSummary = {
         id,
         provider: 'codex',

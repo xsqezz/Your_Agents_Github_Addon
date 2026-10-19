@@ -1,4 +1,6 @@
 import { packager } from '@electron/packager';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const paths = await packager({
   dir: '.',
@@ -16,3 +18,6 @@ const paths = await packager({
 });
 
 console.log('packed:', paths.join('\n'));
+for (const directory of paths) {
+  fs.copyFileSync('build/icon.ico', path.join(directory, 'resources', 'ur-agents.ico'));
+}

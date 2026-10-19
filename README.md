@@ -4,7 +4,7 @@ A 3D hall for GitHub Copilot and local ChatGPT Codex agent sessions. A closed mo
 
 Copilot sessions are watched from the Copilot app and CLI data under `~/.copilot`. Once you install the bridge and switch **Control** on, ur-agents can send messages, stop work, answer questions and decide permission requests. Local Codex threads are listed through the official Codex App Server bundled with the ChatGPT desktop app; their stored turns and activity history appear in the same office, and **Open in ChatGPT** jumps to the original thread. See [Codex sessions](#chatgpt-and-codex-sessions), [Controlling Copilot agents](#controlling-copilot-agents) and [docs/PLAN.md](docs/PLAN.md).
 
-Choose **Copilot** or **ChatGPT Codex** in the top bar. Rooms, counters, desks and the activity panel show only the selected provider. ur-agents remembers the choice and opens or activates that provider's desktop app through its registered app link when it starts or when you switch providers. The provider registry is designed to accept another source later; **Claude Code is not supported yet**.
+On a normal launch, choose **GitHub Copilot** or **ChatGPT Codex** in the startup window. The last choice is highlighted and saved. Selecting a provider opens or activates its desktop app; the top-bar switcher stays visible afterward. Rooms, counters, desks and session details show only that provider. Copilot opens its supported Chats view; Codex opens the ChatGPT app. The provider registry can accept another source later; **Claude Code is not supported yet**.
 
 ## Install
 
@@ -83,7 +83,7 @@ The numbers come from `session.rpc.quota.get()`, which only a Copilot session ca
 
 ## ChatGPT and Codex sessions
 
-ur-agents starts the official `codex app-server --listen stdio://` process and uses its JSON-RPC API to list non-archived local threads and load recent turn history. It finds the CLI bundled with the ChatGPT desktop app or uses `codex` on `PATH`. This avoids reading Codex's private database or rollout files. Threads are identified by their local project folder; up to 140 recent threads are shown, with spawned child threads listed as sub-agents.
+ur-agents starts the official `codex app-server --listen stdio://` process and uses its JSON-RPC API to list non-archived local threads and load recent turn history. It follows every cursor page and lets the server repair its thread index, so named Worktree tasks remain discoverable even when their preview is empty. It finds the CLI bundled with the ChatGPT desktop app or uses `codex` on `PATH`. This avoids reading Codex's private database or rollout files. Threads are identified by their local project folder. The **All Codex threads** room shows every available thread, including child threads, and List view makes long titles readable; hovering a title shows its full text.
 
 Selecting **ChatGPT Codex** opens or activates the ChatGPT desktop app through its registered `codex://` link. If Windows has no handler installed, ur-agents reports the launch failure and keeps running.
 

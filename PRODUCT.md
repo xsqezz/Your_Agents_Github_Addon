@@ -12,7 +12,7 @@ One power user who runs several GitHub Copilot agents and local Codex tasks in p
 
 A local, multi-provider "mission control" for GitHub Copilot and local ChatGPT Codex threads, presented as a 3D office of toy robots. Success: a glance at the window answers "who is working, who is waiting for me, who failed"; a click gives the available activity history and opens the original session. Copilot control uses its official extension bridge. Codex is read-only in ur-agents; replies, stop requests and approvals stay in the ChatGPT app.
 
-The user chooses one provider at a time. Session lists, rooms, counters, and details stay scoped to that choice, and ur-agents opens or activates the matching desktop app. The provider registry can grow; Claude Code is a future option, not a supported source today.
+The user chooses one provider at a time. Session lists, rooms, counters, and details stay scoped to that choice. Codex exposes an All threads room and a complete List view for its local and Worktree threads, while ur-agents opens or activates the matching desktop app. The provider registry can grow; Claude Code is a future option, not a supported source today.
 
 ## Brand Personality
 

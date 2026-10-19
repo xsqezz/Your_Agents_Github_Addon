@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
 import fs from 'node:fs';
+import path from 'node:path';
 
 fs.mkdirSync('dist', { recursive: true });
 
@@ -23,4 +24,5 @@ await Promise.all([
 fs.mkdirSync('dist/bridge', { recursive: true });
 for (const f of ['extension.mjs', 'core.mjs', 'protocol.mjs']) fs.copyFileSync(`bridge/${f}`, `dist/bridge/${f}`);
 for (const f of ['index.html', 'styles.css']) fs.copyFileSync(`src/renderer/${f}`, `dist/${f}`);
+fs.copyFileSync('build/icon.ico', path.join('dist', 'icon.ico'));
 console.log('build ok');

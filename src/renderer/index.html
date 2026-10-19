@@ -87,6 +87,15 @@
     <footer id="statusbar"></footer>
     <div id="toast" role="status" hidden></div>
 
+    <dialog id="provider-picker" aria-labelledby="provider-picker-title" aria-describedby="provider-picker-description">
+      <div class="provider-picker-content">
+        <p class="provider-picker-kicker">ur-agents</p>
+        <h2 id="provider-picker-title">Choose an agent app</h2>
+        <p id="provider-picker-description">Select which sessions and rooms to show. Your choice is saved for next time.</p>
+        <div id="provider-picker-options" class="provider-picker-options"></div>
+      </div>
+    </dialog>
+
     <dialog id="launch" aria-labelledby="launch-title">
       <form id="launch-form" autocomplete="off">
         <header>

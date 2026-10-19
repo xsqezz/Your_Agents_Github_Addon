@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Notification, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, Notification, screen, shell } from 'electron';
 import type { AgentProvider, AgentState, SessionSummary, Snapshot } from '../core/types.ts';
 import { PROVIDERS } from '../core/providers.ts';
 import type { Controller } from '../core/control.ts';
@@ -134,11 +134,14 @@ function startResize(edge: string): void {
 }
 
 function createWindow(): void {
+  const packagedIcon = path.join(process.resourcesPath, 'ur-agents.ico');
+  const iconPath = fs.existsSync(packagedIcon) ? packagedIcon : path.join(__dirname, 'icon.ico');
   win = new BrowserWindow({
     width: 1560,
     height: 960,
     minWidth: 960,
     minHeight: 620,
+    icon: nativeImage.createFromPath(iconPath),
     show: false,
     // The page draws its own rounded window, so the real one is frameless and transparent.
     frame: false,
