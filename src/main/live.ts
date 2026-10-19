@@ -129,7 +129,7 @@ export class LiveSource implements Source, LaunchTarget {
   }
 
   info(): SourceInfo {
-    return { mode: 'live', home: this.home };
+    return { mode: 'live', home: this.home, providers: ['GitHub Copilot'] };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
@@ -278,6 +278,7 @@ export class LiveSource implements Source, LaunchTarget {
       const tokens = db?.context_current_tokens ?? undefined;
       list.push({
         id,
+        provider: 'copilot',
         room: this.roomById.get(id) ?? OTHER_ROOM,
         title: db?.title?.trim() || db?.workspaceName || this.cliTitle(id),
         project: db?.project ?? undefined,

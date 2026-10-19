@@ -1,8 +1,8 @@
 # ur-agents
 
-A 3D hall for your GitHub Copilot agents. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with exactly ten fixed desks (two rows of five; the row by the window is turned round, so its agents face the room). With more than ten sessions, working agents get desks first and the rest are listed in the List view. Every agent session claims a desk: while the agent works, a small vinyl-toy robot sits at it and its pose shows what it is doing; when the agent is idle or offline the chair is tucked in, the laptop is closed and the lamp is off. Click an agent to read everything about it and watch its events stream in live.
+A 3D hall for GitHub Copilot and local ChatGPT Codex agent sessions. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with ten fixed desks. With more than ten sessions, working agents get desks first and the rest are listed in List view. Click an agent to read its activity history and open the original session in its app.
 
-**Version 0.2 can watch and control** the agents. It reads what the Copilot app and CLI already write under `~/.copilot`, and (once you install the bridge and switch **Control** on) sends messages, Stop, answers and permission decisions back. See [Controlling agents](#controlling-agents) and [docs/PLAN.md](docs/PLAN.md).
+Copilot sessions are watched from the Copilot app and CLI data under `~/.copilot`. Once you install the bridge and switch **Control** on, ur-agents can send messages, stop work, answer questions and decide permission requests. Local Codex threads are listed through the official Codex App Server bundled with the ChatGPT desktop app; their stored turns and activity history appear in the same office, and **Open in ChatGPT** jumps to the original thread. See [Codex sessions](#chatgpt-and-codex-sessions), [Controlling Copilot agents](#controlling-copilot-agents) and [docs/PLAN.md](docs/PLAN.md).
 
 ## Install
 
@@ -19,7 +19,7 @@ The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_ag
 ```powershell
 npm install
 node node_modules/electron/install.js   # npm 12 blocks Electron's postinstall
-npm start                               # live data from ~/.copilot
+npm start                               # GitHub Copilot + local ChatGPT Codex sessions
 npm run demo                            # 14 synthetic agents cycling through every state
 ```
 
@@ -35,7 +35,7 @@ Flags: `--demo`, `--agents <model,model,…>` (with `--demo`: one synthetic agen
 
 ## Rooms
 
-There is one hall per **session folder** of the GitHub Copilot app — the projects in its Sessions sidebar, in the same order, plus **Chats**. Sessions that belong to no listed folder land in an **Other sessions** room. Every room has its own ten desks; the room name is painted on the floor.
+Copilot rooms follow the project folders in its Sessions sidebar, plus **Chats** and **Other sessions**. Codex threads are grouped into rooms by their local working folder. Every room has ten desks; the room name is painted on the floor.
 
 Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / `PageDown` (or `Alt+↑` / `Alt+↓`), or by selecting an agent that lives elsewhere (for example from a notification). A yellow badge on a room means agents there need you, a green one counts the agents working. Each room remembers which agent sits at which desk. The first room shown is the one you used last, otherwise the first with something going on.
 
@@ -43,7 +43,7 @@ Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / 
 
 ## Starting a new agent
 
-Click a **free desk** (or press `N`, or use **New agent**) to start an agent in the current room's folder. Pick what it should do, the model (any id; common ones are suggested), reasoning effort, mode (normal, plan first, autopilot) and permissions, optionally a name. It runs the Copilot CLI one-shot (`copilot --prompt …`) in that folder, so it works until the task is done and then goes offline; open it in the GitHub Copilot app to continue. Permissions are `--allow-all-tools` (stays inside the folder) or, after an extra confirmation, `--allow-all`. Needs **Control** switched on, at most six started agents run at once, and the session is filed under its room through a small `launched.json` next to the bridge data.
+Click a **free desk** (or press `N`, or use **New agent**) in a Copilot room to start an agent in that folder. Pick a prompt, model, reasoning effort, mode and permissions, and optionally a name. It runs the Copilot CLI one-shot in that folder. Select its desk and click **Open in Copilot** to jump to the same session in the GitHub Copilot app. To start a Codex task, use the ChatGPT desktop app as usual; it appears in its working-folder room when the local App Server lists it. Select it and choose **Open in ChatGPT** to continue there.
 
 **Sign-in:** agents started from ur-agents run the Copilot CLI by themselves, so the CLI needs its own login. The GitHub Copilot app hands its login only to the sessions it starts, so if you have never run `copilot login`, the first start fails with "not signed in" and the dialog offers a **Sign in to Copilot** button (it opens the CLI's own device-code sign-in in a terminal). Do it once, then press Start again. A start counts as successful only when the agent has received its prompt; a failed one leaves nothing behind and its CLI output is kept in `%LOCALAPPDATA%\ur-agents\launches` for three days.
 
@@ -79,9 +79,15 @@ The bottom of the Rooms list shows your **monthly AI-credit budget**: credits us
 
 The numbers come from `session.rpc.quota.get()`, which only a Copilot session can call with your login, so the **bridge** (see below) reports them: every ~2 minutes while a session with the bridge is open, and once when it connects. This needs no Control switch, only the bridge installed in `~/.copilot/extensions` (the card offers to install or update it). The last report is kept in `%LOCALAPPDATA%\ur-agents\quota.json`, so the card is filled right after the app starts and marks itself stale when it is old. The reset date is the first of next month (UTC) unless the runtime reports one, and a reset estimated that way is shown with `~`. If your plan has an additional budget of 0 it says "no additional budget". Demo mode shows synthetic numbers (`UR_DEMO_QUOTA=ok|warn|extra|none`).
 
-## Controlling agents
+## ChatGPT and Codex sessions
 
-ur-agents can also **drive** your sessions, so the GitHub Copilot app can stay in the background:
+ur-agents starts the official `codex app-server --listen stdio://` process and uses its JSON-RPC API to list non-archived local threads and load recent turn history. It finds the CLI bundled with the ChatGPT desktop app or uses `codex` on `PATH`. This avoids reading Codex's private database or rollout files. Threads are identified by their local project folder; up to 140 recent threads are shown, with spawned child threads listed as sub-agents.
+
+This integration is read-only inside ur-agents. Use **Open in ChatGPT** to send a message, stop work or handle an approval. The App Server reports runtime status only for threads loaded in that server process, so an active thread already running in the desktop app may appear as saved/offline here while its history continues to update. Ordinary ChatGPT chats and remote/cloud tasks are not included; this source is for local Codex threads exposed by the App Server.
+
+## Controlling Copilot agents
+
+ur-agents can also **drive Copilot sessions**, so the GitHub Copilot app can stay in the background:
 
 - **Message** an agent (Enter sends; “Interrupt now” sends it immediately instead of queueing it).
 - **Stop** the agent's current work.
@@ -108,18 +114,19 @@ In `--demo` mode every synthetic agent reacts to commands (add `--control` to st
 
 ```
 src/core      parser + state machine (no I/O) — folds Copilot CLI events into an agent state
-src/main      Electron main: read-only data.db reader, events.jsonl tailer, demo source, control server, IPC
+src/main      Electron main: Copilot reader/tailer, Codex App Server client, demo source, Copilot control, IPC
 src/renderer  three.js office, procedural figures, detail panel with message box, list view
 bridge        the extension that runs inside each Copilot session (Control)
 test          node --test (runs the TypeScript directly)
 ```
 
-Sources (all read-only):
+Sources:
 
 - `~/.copilot/session-state/<id>/events.jsonl` — only the last 2 MB is read at start, then appended lines are tailed.
 - `~/.copilot/data.db` — opened `readOnly`; only an allowlist of columns from `sessions`, `workspaces` and `projects` is queried. Tables holding credentials are never touched.
 - `inuse.<pid>.lock` + process check — tells "process alive" from "agent working".
+- Codex thread list and turn history — read through the local Codex App Server API; ur-agents does not open Codex's private files directly.
 
 Secrets (GitHub tokens, JWTs, private keys, bearer tokens) are redacted before anything reaches the UI. The renderer has no Node access; it only receives normalised events over IPC.
 
-Limitations: the CLI does not persist token-by-token deltas, so "live" means per message / tool call. Event and database formats are internal to the Copilot app and may change between releases. Control relies on the experimental session RPC of the Copilot SDK (`ui.handlePendingUserInput`, `permissions.handlePendingPermissionRequest`); if a future version removes it, the app reports that instead of failing silently. Reading stays read-only; only Control writes anything, and only through the SDK.
+Limitations: Copilot does not persist token-by-token deltas, so "live" means per message / tool call; its event and database formats may change between releases. Codex history is polled from the local App Server, and a separate app-server process cannot subscribe to the desktop app's already-loaded runtime status. Codex controls stay in the ChatGPT app. Copilot Control relies on the Copilot SDK session RPC; if a future version removes it, the app reports that instead of failing silently.

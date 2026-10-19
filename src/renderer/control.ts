@@ -62,6 +62,7 @@ function setBusy(on: boolean): void {
 type Readiness = { ok: true } | { ok: false; notice: string; action?: { label: string; run: () => void } };
 
 function readiness(s: SessionSummary): Readiness {
+  if (s.provider === 'codex') return { ok: false, notice: 'Codex threads are read-only here. Open the thread in the ChatGPT app to send messages, stop work or handle approvals.' };
   if (!state) return { ok: false, notice: 'Connecting to the control service…' };
   if (!state.demo && state.install !== 'current') {
     const outdated = state.install === 'outdated';

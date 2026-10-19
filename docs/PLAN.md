@@ -5,6 +5,8 @@
 Stan: v3 · 2026-10-18 · zbadane na: app 1.1.30, CLI 1.0.99-2, Windows.
 Zmiany vs v2: **grafika 3D** (zamiast pixel-artu) i **sterowanie w zakresie** (przez oficjalne rozszerzenie-most). v3.1: **styl postaci wg Twoich referencji** (chunky figurki-robociki zamiast humanoidów).
 
+Aktualizacja 2026-10-19: aplikacja obsługuje także lokalne wątki Codex z ChatGPT przez oficjalny Codex App Server. Szczegóły: tabela S9 i dopisek w sekcji architektury. Sterowanie Codexem pozostaje w aplikacji ChatGPT.
+
 ---
 
 ## 1. Skąd bierzemy dane (zweryfikowane na Twojej maszynie)
@@ -19,6 +21,7 @@ Zmiany vs v2: **grafika 3D** (zamiast pixel-artu) i **sterowanie w zakresie** (p
 | **S4** | `session-state/<sid>/session.db` | `todos`, `workflow_*` | plan / postęp agenta |
 | **S5** | `inuse.<pid>.lock` + procesy | żywotność | 4 procesy CLI żyją, `is_running`=1 ma jedna sesja → *proces żyje ≠ agent pracuje* |
 | **S8** | **most (rozszerzenie CLI)** — sekcja 5 | zdarzenia sesji na żywo (`session.on`) **+ sterowanie** | oficjalne SDK (`joinSession`); do sprawdzenia, czy `session.on` daje delty tokenów |
+| **S9** | **Codex App Server** — lokalny proces `codex app-server --listen stdio://` | lista lokalnych wątków, ich statusy i historia tur | oficjalne JSON-RPC; wątki Local i Worktree; tylko odczyt w ur-agents, bez czytania prywatnych baz Codexa |
 | S6 | OpenTelemetry CLI | spany modelu i narzędzi | opcjonalne, env przed startem apki |
 | ✗ | prywatny WS apki (`run/ws.port`+token) | — | **odrzucone** na rzecz S8 (oficjalne, wersjonowane SDK) |
 | ✗ | proxy MITM HTTPS | surowy ruch | odrzucone: własny certyfikat + wgląd w token Copilota |
@@ -35,7 +38,7 @@ Zmiany vs v2: **grafika 3D** (zamiast pixel-artu) i **sterowanie w zakresie** (p
 2. Forma: **samodzielna aplikacja desktop `.exe`**.
 3. Stack: **Electron + TypeScript** (na maszynie jest Node, **nie ma Rusta** → Tauri odpada bez instalacji toolchainu; demon działa w procesie głównym). Do sprawdzenia w Fazie 0: Node w Electronie wspiera `node:sqlite` (≥22.5), inaczej `better-sqlite3`.
 4. Grafika: **3D — Three.js** (react-three-fiber). Postacie to proste, zaokrąglone bryły, więc prototyp powstaje **proceduralnie w kodzie**, docelowo modele **glTF**; panele w React/HTML.
-5. Zakres: lokalne sesje apki. Agenci chmurowi (`gh agent-task`) — później.
+5. Zakres: lokalne sesje Copilota oraz lokalne wątki Codex (Local i Worktree). Codex jest odczytywany przez App Server; zwykłe rozmowy ChatGPT i wątki Cloud pozostają poza zakresem.
 6. Historia we własnej bazie (`%LOCALAPPDATA%\ur-agents\`), retencja 30 dni, wyłączalna.
 7. Styl wg Twoich referencji (pomarańczowy klockowaty stworek; ciemny robocik z ekranem-twarzą, cyjanowymi oczami i słuchawkami). Postacie to **własne projekty** „w klimacie" rodziny, **bez logotypów** firm i bez kopiowania 1:1 cudzych maskotek (znaki towarowe, gdyby repo było publiczne). Założenie: ref. #1 = Claude, ref. #2 = Codex/GPT.
 8. Żadnych prawdziwych danych sesji w repo.
@@ -51,12 +54,18 @@ flowchart LR
     BR["ur-agents-bridge<br/>rozszerzenie, joinSession"]
     CLI <-- JSON-RPC --> BR
   end
+  subgraph CODEX["ChatGPT desktop · Codex"]
+    THREADS["Lokalne wątki Local / Worktree"]
+    CAS["oficjalny Codex App Server<br/>JSON-RPC po stdio"]
+    THREADS <-- odczyt przez API --> CAS
+  end
   CLI -- append --> EV[("events.jsonl")]
   CLI -- zapis --> SS[("session-store.db")]
   APP -- zapis --> DD[("data.db")]
   subgraph EXE["ur-agents.exe (Electron)"]
     subgraph MAIN["proces glowny"]
       T["Tailer + readers - read-only"] --> N["Normalizer"] --> R["Reducer stanow"] --> ST[("store.db")]
+      C["Klient Codex App Server - read-only"] --> N
       CTL["Kontroler komend + audyt"]
     end
     R -- IPC --> UI["Renderer: biuro 3D + panele"]
@@ -67,7 +76,10 @@ flowchart LR
   SS --> T
   DD --> T
   BR <-- loopback WS + token --> CTL
+  CAS <-- JSON-RPC --> C
 ```
+
+Codex App Server jest uruchamiany lokalnie przez ur-agents z CLI dołączonego do aplikacji ChatGPT (lub z `PATH`). Osobny proces może pokazać zapisane wątki i historię, ale nie widzi aktywnego stanu sesji, którą aplikacja ChatGPT już załadowała we własnym procesie. Dlatego status takiego wątku może tu wyglądać na zapisany/nieaktywny; oryginalny wątek można otworzyć przyciskiem **Open in ChatGPT**.
 
 Zasady:
 
