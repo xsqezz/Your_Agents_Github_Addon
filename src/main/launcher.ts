@@ -2,14 +2,16 @@ import crypto from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { dataDir } from '../../bridge/protocol.mjs';
 import { buildArgs, parseLaunch, type LaunchResult } from '../core/launch.ts';
 import type { LaunchTarget } from './source.ts';
 
 const MAX_RUNNING = 6;
-const SPAWN_WAIT_MS = 4000;
+const START_WAIT_MS = 25_000;
 
 export interface Launcher {
   launch(input: unknown): Promise<LaunchResult>;
+  signIn(): LaunchResult;
 }
 
 function versionKey(v: string): number[] {
@@ -61,29 +63,89 @@ export class CliLauncher implements Launcher {
 
     const sessionId = crypto.randomUUID();
     const exe = findCli();
+    const logFile = path.join(dataDir(), 'launches', `${sessionId}.log`);
+    let log = -1;
+    try {
+      fs.mkdirSync(path.dirname(logFile), { recursive: true });
+      log = fs.openSync(logFile, 'a');
+    } catch {
+      /* without a log the start still works, only the failure reason is lost */
+    }
     let child: ChildProcess;
     try {
-      child = spawn(exe, buildArgs(req, sessionId), { cwd, detached: true, stdio: 'ignore', windowsHide: true });
+      child = spawn(exe, buildArgs(req, sessionId), { cwd, detached: true, stdio: ['ignore', log >= 0 ? log : 'ignore', log >= 0 ? log : 'ignore'], windowsHide: true });
     } catch (e) {
+      if (log >= 0) fs.closeSync(log);
       return { ok: false, error: `Could not start Copilot: ${(e as Error).message}` };
     }
-    const started = await new Promise<string | null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), SPAWN_WAIT_MS);
-      child.once('spawn', () => {
+    if (log >= 0) fs.closeSync(log);
+    this.running.add(child);
+
+    // The agent has really started once its session writes events; if the CLI exits first, it failed and says why in its log.
+    const outcome = await new Promise<{ kind: 'started' } | { kind: 'failed'; reason: string } | { kind: 'slow' }>((resolve) => {
+      let done = false;
+      const finish = (v: { kind: 'started' } | { kind: 'failed'; reason: string } | { kind: 'slow' }): void => {
+        if (done) return;
+        done = true;
+        clearInterval(poll);
         clearTimeout(timer);
-        resolve(null);
-      });
-      child.once('error', (e) => {
-        clearTimeout(timer);
-        resolve((e as NodeJS.ErrnoException).code === 'ENOENT' ? 'The Copilot CLI was not found.' : `Could not start Copilot: ${e.message}`);
+        resolve(v);
+      };
+      const poll = setInterval(() => {
+        if (this.target.sessionStarted(sessionId)) finish({ kind: 'started' });
+      }, 300);
+      const timer = setTimeout(() => finish({ kind: 'slow' }), START_WAIT_MS);
+      child.once('error', (e) => finish({ kind: 'failed', reason: (e as NodeJS.ErrnoException).code === 'ENOENT' ? 'The Copilot CLI was not found.' : e.message }));
+      child.once('exit', (code) => {
+        this.running.delete(child);
+        if (!this.target.sessionStarted(sessionId)) finish({ kind: 'failed', reason: `exit ${code ?? '?'}` });
       });
     });
-    if (started) return { ok: false, error: started };
-    this.running.add(child);
-    child.once('exit', () => this.running.delete(child));
+    if (outcome.kind === 'failed') {
+      this.running.delete(child);
+      const text = readTail(logFile);
+      setTimeout(() => this.target.discard(sessionId), 1500);
+      if (/no authentication information|not (logged|signed) in|run .?copilot login|unauthori[sz]ed/i.test(text)) {
+        return { ok: false, needsLogin: true, error: 'The Copilot CLI is not signed in, so it cannot start agents on its own. Sign in once and try again.' };
+      }
+      const detail = text.split('\n').map((l) => l.trim()).filter(Boolean).slice(-3).join(' ');
+      return { ok: false, error: `Copilot stopped right after starting (${outcome.reason}).${detail ? ` ${detail.slice(0, 300)}` : ''}` };
+    }
     child.unref();
     this.target.addHint(sessionId, req.room);
-    return { ok: true, sessionId };
+    pruneLogs(path.dirname(logFile));
+    return outcome.kind === 'slow' ? { ok: true, sessionId, note: 'Agent is still starting; it takes a desk as soon as it begins.' } : { ok: true, sessionId };
+  }
+
+  /** Opens the CLI's own sign-in (device code) in a normal terminal window. */
+  signIn(): LaunchResult {
+    try {
+      const exe = findCli();
+      if (process.platform === 'win32') spawn('cmd.exe', ['/c', 'start', 'ur-agents: copilot login', exe, 'login'], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+      else spawn(exe, ['login'], { detached: true, stdio: 'ignore' }).unref();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `Could not open the sign-in: ${(e as Error).message}` };
+    }
+  }
+}
+
+function readTail(file: string): string {
+  try {
+    return fs.readFileSync(file, 'utf8').slice(-4000);
+  } catch {
+    return '';
+  }
+}
+
+function pruneLogs(dir: string): void {
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      const p = path.join(dir, f);
+      if (Date.now() - fs.statSync(p).mtimeMs > 3 * 24 * 3600_000) fs.rmSync(p, { force: true });
+    }
+  } catch {
+    /* housekeeping only */
   }
 }
 
@@ -100,5 +162,9 @@ export class DemoLauncher implements Launcher {
     const parsed = parseLaunch(input);
     if (!parsed.ok) return { ok: false, error: parsed.error };
     return { ok: true, note: 'Demo mode: nothing was started.' };
+  }
+
+  signIn(): LaunchResult {
+    return { ok: true, note: 'Demo mode: nothing was opened.' };
   }
 }

@@ -96,6 +96,26 @@ export class LiveSource implements Source, LaunchTarget {
     return dirExists(dir) ? dir : undefined;
   }
 
+  /** The agent has really begun once the prompt is in its event log; a CLI without a login writes only start and shutdown. */
+  sessionStarted(sessionId: string): boolean {
+    try {
+      return fs.readFileSync(eventsPath(this.stateDir, sessionId), 'utf8').includes('"type":"user.message"');
+    } catch {
+      return false;
+    }
+  }
+
+  /** Removes the empty session a failed start leaves behind. */
+  discard(sessionId: string): void {
+    if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return;
+    delete this.hints[sessionId];
+    try {
+      fs.rmSync(path.join(this.stateDir, sessionId), { recursive: true, force: true });
+    } catch {
+      /* it may still be held open for a moment; it is harmless */
+    }
+  }
+
   /** Files a session started from ur-agents under its room (the app database never hears of it). */
   addHint(sessionId: string, roomId: string): void {
     this.hints[sessionId] = roomId;

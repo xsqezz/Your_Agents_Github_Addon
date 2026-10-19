@@ -11,6 +11,30 @@ export function dataDir() {
   return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'ur-agents');
 }
 
+/** Reduces the runtime's quota projection to the few numbers the app shows. Returns null when it has no budget. */
+export function reduceQuota(projection, now = Date.now()) {
+  const p = projection && typeof projection === 'object' ? projection : {};
+  const quotas = Array.isArray(p.providerQuotas) ? p.providerQuotas : [];
+  const own = quotas.find((q) => q && q.provider && q.provider.kind === 'copilot' && q.budgetMetadata) ?? quotas.find((q) => q && q.budgetMetadata);
+  const m = own?.budgetMetadata;
+  const snap = p.snapshots?.premium_interactions ?? Object.values(p.snapshots ?? {}).find(Boolean);
+  const entitlement = m?.entitlement ?? snap?.entitlementRequests;
+  const consumed = m?.consumed ?? snap?.usedRequests;
+  if (typeof entitlement !== 'number' || typeof consumed !== 'number') return null;
+  return {
+    unit: own?.unit ?? 'ai_credits',
+    entitlement,
+    consumed,
+    overage: m?.overage ?? snap?.overage ?? 0,
+    overageLimit: m?.overageLimit ?? snap?.overageEntitlement ?? 0,
+    overageAllowed: (m?.overageAllowedWhenExhausted ?? snap?.overageAllowedWithExhaustedQuota) === true,
+    unlimited: m?.unlimited === true || snap?.isUnlimitedEntitlement === true,
+    plan: typeof p.planTier === 'string' ? p.planTier : undefined,
+    resetAt: typeof snap?.resetDateEpochMs === 'number' ? snap.resetDateEpochMs : undefined,
+    observedAt: Date.parse(own?.observedAt ?? '') || now,
+  };
+}
+
 /** Commands the app may send to a session through the bridge. Anything else is refused. */
 export const COMMAND_TYPES = ['send', 'abort', 'answer', 'permission', 'setModel'];
 

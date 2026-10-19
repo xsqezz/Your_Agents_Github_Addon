@@ -3,6 +3,7 @@ import type { AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, Tim
 import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
 import type { LaunchResult } from '../core/launch.ts';
 import { initControl, renderControl } from './control.ts';
+import { initCredits } from './credits.ts';
 import { initLauncher, openLauncher, renderLauncher } from './launch.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
@@ -22,6 +23,7 @@ declare global {
       controlUninstall(): Promise<ControlResult>;
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
+      signIn(): Promise<LaunchResult>;
       winAction(action: 'minimize' | 'maximize' | 'close'): void;
       winResize(edge: string | null): void;
       onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;
@@ -437,6 +439,7 @@ function boot(): void {
   scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openLauncher });
   initControl(selected);
   initLauncher(currentRoom);
+  initCredits();
   window.ua.onControl(() => renderLauncher());
 
   document.addEventListener('click', (e) => {

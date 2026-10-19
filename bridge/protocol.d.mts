@@ -3,6 +3,7 @@ export const MAX_TEXT: number;
 export const MAX_ID: number;
 export const COMMAND_TYPES: readonly string[];
 export function dataDir(): string;
+export function reduceQuota(projection: unknown, now?: number): Record<string, unknown> | null;
 
 export type Command =
   | { type: 'send'; text: string; interrupt: boolean }

@@ -4,6 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { dataDir, describeCommand, PROTOCOL_VERSION, validateCommand } from '../../bridge/protocol.mjs';
 import type { BridgeInstall, ControlResult, ControlSession, ControlState, Controller, PendingItem } from '../core/control.ts';
+import { cleanQuota, type Quota } from '../core/quota.ts';
 import { safeText } from '../core/redact.ts';
 
 const FILES = ['extension.mjs', 'core.mjs', 'protocol.mjs'];
@@ -70,6 +71,7 @@ export class ControlServer implements Controller {
   private sessions = new Map<string, BridgeSession>();
   private results = new Map<string, { resolve: (r: ControlResult) => void; timer: NodeJS.Timeout }>();
   private enabled: boolean;
+  private quota: Quota | undefined;
 
   constructor(opts: { copilotHome: string; bridgeSource: string; onChange: () => void }) {
     this.dir = dataDir();
@@ -77,6 +79,8 @@ export class ControlServer implements Controller {
     this.bridgeSource = opts.bridgeSource;
     this.onChange = opts.onChange;
     this.enabled = readJson<{ controlEnabled?: boolean }>(path.join(this.dir, 'settings.json'), {}).controlEnabled === true;
+    // The last known budget survives restarts, so the sidebar is not empty until a session reports again.
+    this.quota = cleanQuota(readJson<unknown>(path.join(this.dir, 'quota.json'), null)) ?? undefined;
   }
 
   async start(): Promise<void> {
@@ -104,7 +108,7 @@ export class ControlServer implements Controller {
     const now = Date.now();
     const sessions: Record<string, ControlSession> = {};
     for (const [id, s] of this.sessions) sessions[id] = { connected: now - s.lastSeen < CONNECTED_MS, pending: s.pending };
-    return { enabled: this.enabled, install: this.installState(), demo: false, installDir: this.installDir, sessions };
+    return { enabled: this.enabled, install: this.installState(), demo: false, installDir: this.installDir, sessions, quota: this.quota };
   }
 
   setEnabled(on: boolean): void {
@@ -284,6 +288,20 @@ export class ControlServer implements Controller {
         s.pending = cleanPending(b.pending);
         this.onChange();
         return this.json(res, 200, { ok: true, enabled: this.enabled });
+      }
+      if (url.pathname === '/b/quota') {
+        this.session(b.sessionId);
+        const q = cleanQuota(b.quota);
+        if (q && (!this.quota || q.observedAt >= this.quota.observedAt)) {
+          this.quota = q;
+          try {
+            fs.writeFileSync(path.join(this.dir, 'quota.json'), JSON.stringify(q));
+          } catch {
+            /* kept in memory */
+          }
+          this.onChange();
+        }
+        return this.json(res, 200, { ok: true });
       }
       if (url.pathname === '/b/result') {
         this.session(b.sessionId);

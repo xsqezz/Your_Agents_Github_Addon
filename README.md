@@ -45,6 +45,8 @@ Switch rooms by clicking one in the **Rooms** list on the left, with `PageUp` / 
 
 Click a **free desk** (or press `N`, or use **New agent**) to start an agent in the current room's folder. Pick what it should do, the model (any id; common ones are suggested), reasoning effort, mode (normal, plan first, autopilot) and permissions, optionally a name. It runs the Copilot CLI one-shot (`copilot --prompt …`) in that folder, so it works until the task is done and then goes offline; open it in the GitHub Copilot app to continue. Permissions are `--allow-all-tools` (stays inside the folder) or, after an extra confirmation, `--allow-all`. Needs **Control** switched on, at most six started agents run at once, and the session is filed under its room through a small `launched.json` next to the bridge data.
 
+**Sign-in:** agents started from ur-agents run the Copilot CLI by themselves, so the CLI needs its own login. The GitHub Copilot app hands its login only to the sessions it starts, so if you have never run `copilot login`, the first start fails with "not signed in" and the dialog offers a **Sign in to Copilot** button (it opens the CLI's own device-code sign-in in a terminal). Do it once, then press Start again. A start counts as successful only when the agent has received its prompt; a failed one leaves nothing behind and its CLI output is kept in `%LOCALAPPDATA%\ur-agents\launches` for three days.
+
 ## What you see
 
 A desk is **taken** by every session of the room. While its agent is thinking, using a tool, waiting for you, compacting, failed, done or stalled it is awake at its monitors; **idle** and **offline** agents sit there asleep, and only desks without a session stay empty. Desks are numbered and keep their session for as long as it is listed.
@@ -70,6 +72,12 @@ A working agent sits with its back to you, facing its monitors. When it needs yo
 | Stalled | grey and frozen |
 
 All figures share one body — a chunky vinyl-toy block with two glossy oval eyes, stubby side nubs and four short legs — and differ by colour and emblem (printed on the chest and on the back, so you can tell them apart while they face their screens): `claude-*` orange with a starburst, `gpt-*`/codex teal with a six-petal rosette, `gemini-*` rainbow gradient with a four-point sparkle, `grok-*` graphite with a slashed ring and "GROK", `mai-*` white with four coloured squares, `auto` (GitHub Copilot's automatic model selection) dark graphite with the white GitHub mark, anything else grey. The emblems are simple glyphs drawn in code, not the companies' official logos, except the GitHub mark, which is the MIT-licensed Octicon. The tier (haiku/mini → opus/sol) changes size and adds a star. State is always also written as text, and there is a **List** view for screen readers and low-end GPUs.
+
+## Monthly AI credits
+
+The bottom of the Rooms list shows your **monthly AI-credit budget**: credits used out of the total, what is left, and when it resets. The total includes your plan's **additional budget** (the extra credits you allow beyond the included ones): the bar shows the included part solid and the additional part striped, with a tick where the included credits end. It turns yellow at 80 % and red at 95 % of the whole budget and says "Limit reached" when both are used up.
+
+The numbers come from `session.rpc.quota.get()`, which only a Copilot session can call with your login, so the **bridge** (see below) reports them: every ~2 minutes while a session with the bridge is open, and once when it connects. This needs no Control switch, only the bridge installed in `~/.copilot/extensions` (the card offers to install or update it). The last report is kept in `%LOCALAPPDATA%\ur-agents\quota.json`, so the card is filled right after the app starts and marks itself stale when it is old. The reset date is the first of next month (UTC) unless the runtime reports one, and a reset estimated that way is shown with `~`. If your plan has an additional budget of 0 it says "no additional budget". Demo mode shows synthetic numbers (`UR_DEMO_QUOTA=ok|warn|extra|none`).
 
 ## Controlling agents
 

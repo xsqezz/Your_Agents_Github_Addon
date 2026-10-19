@@ -156,7 +156,10 @@ function createWindow(): void {
   const pushState = (): void => {
     win?.webContents.send('ua:win-state', { maximized: win.isMaximized(), fullscreen: win.isFullScreen() });
   };
-  for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'] as const) win.on(ev, pushState);
+  win.on('maximize', pushState);
+  win.on('unmaximize', pushState);
+  win.on('enter-full-screen', pushState);
+  win.on('leave-full-screen', pushState);
   win.on('closed', stopResize);
   win.webContents.on('did-finish-load', pushState);
 
@@ -214,6 +217,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-uninstall', () => control.uninstall());
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
   ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
+  ipcMain.handle('ua:sign-in', () => launcher.signIn());
   ipcMain.on('ua:win', (e, action: unknown) => {
     if (!win || e.sender !== win.webContents) return;
     if (action === 'minimize') win.minimize();

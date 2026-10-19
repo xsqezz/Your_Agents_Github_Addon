@@ -1,6 +1,26 @@
 import { validateCommand } from '../../bridge/protocol.mjs';
 import type { ControlResult, ControlSession, ControlState, Controller, PendingItem } from '../core/control.ts';
+import type { Quota } from '../core/quota.ts';
 import type { DemoSource } from './demo.ts';
+
+/** Synthetic budget: the included credits are used up and the additional budget is being drawn on (UR_DEMO_QUOTA=ok|warn|extra|none changes it). */
+function demoQuota(): Quota | undefined {
+  const mode = process.env.UR_DEMO_QUOTA || 'extra';
+  if (mode === 'none') return undefined;
+  const consumed = mode === 'ok' ? 31_240 : mode === 'warn' ? 51_870 : 61_840;
+  const entitlement = 60_000;
+  return {
+    unit: 'ai_credits',
+    entitlement,
+    consumed,
+    overage: Math.max(0, consumed - entitlement),
+    overageLimit: mode === 'extra' ? 5_000 : 0,
+    overageAllowed: true,
+    unlimited: false,
+    plan: 'business',
+    observedAt: Date.now() - 40_000,
+  };
+}
 
 /** Control for demo mode: every synthetic agent "has a bridge" and reacts to commands, so the chat UI can be tried safely. */
 export class DemoControl implements Controller {
@@ -27,7 +47,7 @@ export class DemoControl implements Controller {
       if (s.pending && s.state === 'awaiting-input') pending.push({ kind: 'input', requestId: `${s.id}:ask`, text: s.pending.text, choices: ['Postgres 17', 'SQLite'], allowFreeform: true });
       sessions[s.id] = { connected: true, pending };
     }
-    return { enabled: this.enabled, install: 'current', demo: true, installDir: '(demo)', sessions };
+    return { enabled: this.enabled, install: 'current', demo: true, installDir: '(demo)', sessions, quota: demoQuota() };
   }
 
   setEnabled(on: boolean): void {
