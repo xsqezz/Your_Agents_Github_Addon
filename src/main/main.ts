@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, nativeImage, Notification, screen, shell } from 'electron';
 import type { AgentProvider, AgentState, SessionSummary, Snapshot } from '../core/types.ts';
@@ -11,6 +11,7 @@ import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
 import { CodexSource, CombinedSource } from './codex.ts';
 import { CliLauncher, DemoLauncher, type Launcher } from './launcher.ts';
+import { launchProviderApp } from './provider-launch.ts';
 import type { Source } from './source.ts';
 
 function arg(name: string): string | undefined {
@@ -26,20 +27,82 @@ const dumpFile = arg('dump');
 
 const ATTENTION: AgentState[] = ['awaiting-input', 'awaiting-permission', 'error'];
 
-/** Squirrel runs the app with --squirrel-* while installing, updating and uninstalling. Shortcuts are the app's job; then it exits at once. */
+if (process.platform === 'win32') app.setAppUserModelId('com.squirrel.ur_agents.ur-agents');
+
+/** Squirrel downloads Electron's default app.ico unless we replace it with our packaged icon. */
+function copySquirrelPackageIcon(iconPath: string): void {
+  const installRoot = path.resolve(path.dirname(process.execPath), '..');
+  try {
+    fs.copyFileSync(iconPath, path.join(installRoot, 'app.ico'));
+  } catch {
+    /* Squirrel may already have installed this release's icon. */
+  }
+}
+
+/** Create Squirrel-compatible shortcuts with the versioned executable as their icon source. */
+function createSquirrelShortcuts(): boolean {
+  const quote = (value: string): string => `'${value.replace(/'/g, "''")}'`;
+  const installRoot = path.resolve(path.dirname(process.execPath), '..');
+  const appDirectory = path.dirname(process.execPath);
+  const iconLocation = `${process.execPath},0`;
+  const script = `
+$ErrorActionPreference = 'Stop'
+$target = ${quote(path.join(installRoot, 'ur-agents.exe'))}
+$workingDirectory = ${quote(appDirectory)}
+$icon = ${quote(iconLocation)}
+$desktop = [Environment]::GetFolderPath('DesktopDirectory')
+$startMenu = [IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\ur-agents')
+New-Item -ItemType Directory -Path $startMenu -Force | Out-Null
+$links = @(
+  [IO.Path]::Combine($desktop, 'ur-agents.lnk'),
+  [IO.Path]::Combine($startMenu, 'ur-agents.lnk')
+)
+$shell = New-Object -ComObject WScript.Shell
+foreach ($linkPath in $links) {
+  $link = $shell.CreateShortcut($linkPath)
+  $link.TargetPath = $target
+  $link.WorkingDirectory = $workingDirectory
+  $link.IconLocation = $icon
+  $link.Description = 'Monitor GitHub Copilot and ChatGPT Codex agents'
+  $link.Save()
+}
+$uninstallRoot = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
+Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue | ForEach-Object {
+  $entry = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+  if ($entry.DisplayName -eq 'ur-agents') {
+    Set-ItemProperty $_.PSPath -Name DisplayIcon -Value $icon -ErrorAction SilentlyContinue
+  }
+}
+`;
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded], {
+    windowsHide: true,
+    stdio: 'ignore',
+    timeout: 12_000,
+  });
+  return result.status === 0;
+}
+
+/** Squirrel runs the app with --squirrel-* while installing, updating and uninstalling. It updates shortcuts, then exits. */
 function handleSquirrel(): boolean {
   const cmd = process.argv[1];
   if (process.platform !== 'win32' || !cmd?.startsWith('--squirrel-')) return false;
   const exe = path.basename(process.execPath);
   const updater = path.resolve(path.dirname(process.execPath), '..', 'Update.exe');
-  const run = (args: string[]): void => {
+  const run = (args: string[]): number | undefined => {
     try {
-      spawn(updater, args, { detached: true, stdio: 'ignore' }).unref();
+      const child = spawn(updater, args, { detached: true, stdio: 'ignore' });
+      child.unref();
+      return child.pid;
     } catch {
       /* shortcuts are a convenience */
+      return undefined;
     }
   };
-  if (cmd === '--squirrel-install' || cmd === '--squirrel-updated') run([`--createShortcut=${exe}`]);
+  if (cmd === '--squirrel-install' || cmd === '--squirrel-updated') {
+    copySquirrelPackageIcon(path.join(process.resourcesPath, 'ur-agents.ico'));
+    if (!createSquirrelShortcuts()) run([`--createShortcut=${exe}`]);
+  }
   else if (cmd === '--squirrel-uninstall') {
     run([`--removeShortcut=${exe}`]);
     // The bridge is useless without the app, so it goes too. Settings and the audit log stay.
@@ -136,12 +199,14 @@ function startResize(edge: string): void {
 function createWindow(): void {
   const packagedIcon = path.join(process.resourcesPath, 'ur-agents.ico');
   const iconPath = fs.existsSync(packagedIcon) ? packagedIcon : path.join(__dirname, 'icon.ico');
+  let icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty() && iconPath !== path.join(__dirname, 'icon.ico')) icon = nativeImage.createFromPath(path.join(__dirname, 'icon.ico'));
   win = new BrowserWindow({
     width: 1560,
     height: 960,
     minWidth: 960,
     minHeight: 620,
-    icon: nativeImage.createFromPath(iconPath),
+    icon,
     show: false,
     // The page draws its own rounded window, so the real one is frameless and transparent.
     frame: false,
@@ -236,7 +301,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:open-provider-app', async (_e, provider: unknown) => {
     if (provider !== 'copilot' && provider !== 'codex') return { ok: false, error: 'Unsupported provider.' };
     try {
-      await shell.openExternal(PROVIDERS[provider].appUrl);
+      await launchProviderApp(provider, (url) => shell.openExternal(url), win);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: `Could not open ${PROVIDERS[provider].label}: ${(e as Error).message}` };

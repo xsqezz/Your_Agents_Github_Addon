@@ -31,6 +31,8 @@ await createWindowsInstaller({
   exe: 'ur-agents.exe',
   setupExe: `ur-agents-Setup-${pkg.version}.exe`,
   setupIcon: path.resolve('build', 'icon.ico'),
+  // Squirrel downloads iconUrl without private GitHub credentials. The app replaces its generated
+  // Electron-default app.ico with the packaged icon during its --squirrel-install/--squirrel-updated hook.
   noMsi: true,
 });
 
