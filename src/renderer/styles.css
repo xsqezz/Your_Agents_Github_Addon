@@ -100,15 +100,22 @@ body.maximized .wbtn .ico-restore { display: block; }
 /* ───────── list view ───────── */
 #list-view { position: fixed; inset: 68px 12px 40px 12px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
 body.has-panel #list-view { right: calc(var(--panel-w) + 24px); }
-table.list { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.list { width: 100%; min-width: 1220px; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.list th:nth-child(1), .list td:nth-child(1) { width: 110px; }
+.list th:nth-child(2), .list td:nth-child(2) { width: 350px; }
+.list th:nth-child(3), .list td:nth-child(3) { width: 180px; }
+.list th:nth-child(4), .list td:nth-child(4) { width: 250px; }
+.list th:nth-child(5), .list td:nth-child(5) { width: 110px; }
+.list th:nth-child(6), .list td:nth-child(6) { width: 100px; }
+.list th:nth-child(7), .list td:nth-child(7) { width: 120px; }
 .list th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-weight: 600; color: var(--muted); padding: 9px 12px; border-bottom: 1px solid var(--line); }
 .list td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .list tr.is-selected td { background: #1a1a1a; }
 .list tr:hover td { background: #141414; }
 .c-state { white-space: nowrap; display: flex; gap: 8px; align-items: center; }
 .c-name .sub { display: block; color: var(--muted); font-size: 12px; }
-.c-name { max-width: 380px; }
-.row-open { max-width: 100%; background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.c-name { min-width: 300px; }
+.row-open { display: block; width: 100%; max-width: 100%; background: none; border: 0; padding: 0; cursor: pointer; font-weight: 600; text-align: left; white-space: normal; overflow-wrap: break-word; word-break: normal; line-height: 1.4; }
 .row-open:hover { color: var(--accent); }
 .c-act { font-family: var(--mono); font-size: 12px; color: var(--muted); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .c-ctx { white-space: nowrap; }
@@ -207,13 +214,18 @@ body.has-panel #statusbar { right: calc(var(--panel-w) + 24px); }
 
 /* ───────── rooms ───────── */
 :root { --rooms-w: clamp(240px, 21vw, 330px); }
+body.codex-sidebar { --rooms-w: clamp(300px, 26vw, 420px); }
 #rooms {
   position: fixed; z-index: 5; top: 12px; left: 12px; bottom: 52px; width: var(--rooms-w);
   display: flex; flex-direction: column; background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); overflow: hidden;
 }
 .rooms-head { display: flex; justify-content: space-between; padding: 11px 14px 9px; border-bottom: 1px solid var(--line); font-size: 11.5px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-#room-list { list-style: none; margin: 0; padding: 6px; overflow-x: hidden; overflow-y: auto; display: grid; gap: 2px; align-content: start; flex: 1; }
+.sidebar-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; flex: none; margin: 7px 8px 0; padding: 3px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; }
+.sidebar-tabs button { min-width: 0; padding: 5px 8px; background: transparent; border: 0; border-radius: 7px; color: var(--muted); cursor: pointer; font-size: 12px; }
+.sidebar-tabs button[aria-pressed="true"] { background: #252525; color: var(--text); }
+.sidebar-tabs button:hover { color: var(--text); }
+#room-list, #chat-list { list-style: none; min-height: 0; margin: 0; padding: 6px; overflow-x: hidden; overflow-y: auto; display: grid; gap: 2px; align-content: start; flex: 1; }
 .room { width: 100%; display: flex; align-items: center; gap: 9px; padding: 7px 8px; background: transparent; border: 1px solid transparent; border-radius: 9px; cursor: pointer; text-align: left; color: var(--muted); transition: background 0.2s var(--ease), color 0.2s var(--ease); }
 .room:hover { background: var(--surface-2); color: var(--text); }
 .room[aria-current="true"] { background: var(--surface-2); border-color: var(--line-strong); color: var(--text); }
@@ -222,6 +234,12 @@ body.has-panel #statusbar { right: calc(var(--panel-w) + 24px); }
 .room-ico::before { content: ""; position: absolute; left: -1.5px; top: -4.5px; width: 7px; height: 3px; border: 1.5px solid currentColor; border-bottom: 0; border-radius: 2px 2px 0 0; }
 .room[data-kind="chats"] .room-ico { border-radius: 6px; height: 11px; }
 .room[data-kind="chats"] .room-ico::before { display: none; }
+.chat-entry { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: start; gap: 9px; width: 100%; padding: 8px; background: transparent; border: 1px solid transparent; border-radius: 9px; color: var(--muted); cursor: pointer; text-align: left; }
+.chat-entry:hover { background: var(--surface-2); color: var(--text); }
+.chat-entry[aria-current="true"] { background: var(--surface-2); border-color: var(--line-strong); color: var(--text); }
+.chat-entry > .dot { margin-top: 5px; }
+.chat-copy { display: grid; min-width: 0; gap: 3px; }
+.chat-title { font-size: 13px; font-weight: 550; line-height: 1.35; white-space: normal; overflow-wrap: break-word; word-break: normal; }
 .badge { flex: none; min-width: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 650; line-height: 17px; text-align: center; color: #0a0a0a; }
 .badge.needs { background: #f5c542; }
 .badge.work { background: #3ddc97; }

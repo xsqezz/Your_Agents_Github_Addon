@@ -79,8 +79,13 @@
     </aside>
 
     <aside id="rooms" hidden aria-label="Rooms">
-      <div class="rooms-head"><span>Rooms</span><span id="rooms-count"></span></div>
+      <div class="rooms-head"><span id="rooms-heading">Rooms</span><span id="rooms-count"></span></div>
+      <div id="sidebar-tabs" class="sidebar-tabs" role="group" aria-label="Codex sidebar view" hidden>
+        <button type="button" data-sidebar-view="chats" aria-pressed="true">Chats</button>
+        <button type="button" data-sidebar-view="rooms" aria-pressed="false">Rooms</button>
+      </div>
       <ul id="room-list"></ul>
+      <ul id="chat-list" hidden aria-label="Codex chats"></ul>
       <section id="credits" aria-label="Monthly AI credits"></section>
     </aside>
 

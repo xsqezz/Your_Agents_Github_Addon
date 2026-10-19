@@ -54,6 +54,8 @@ const providerKey = (value: string | null): ProviderKey | null => value && Objec
 const activeProvider: ProviderKey = providerKey(params.get('provider')) ?? (params.get('room')?.startsWith('codex:') ? 'codex' : null) ?? providerKey(localStorage.getItem('ua.provider')) ?? 'copilot';
 const initialRoom = params.get('room') ?? localStorage.getItem(`ua.room.${activeProvider}`) ?? (activeProvider === 'copilot' ? localStorage.getItem('ua.room') : null) ?? '';
 const initialView = params.get('view') ?? localStorage.getItem(`ua.view.${activeProvider}`) ?? (activeProvider === 'codex' ? 'list' : localStorage.getItem('ua.view') ?? '3d');
+type SidebarView = 'rooms' | 'chats';
+let sidebarView: SidebarView = activeProvider === 'codex' && localStorage.getItem('ua.sidebar.codex') !== 'rooms' ? 'chats' : 'rooms';
 const store = {
   all: [] as SessionSummary[],
   rooms: [] as RoomInfo[],
@@ -221,19 +223,26 @@ let roomsSig = '';
 function renderRooms(): void {
   const box = $('rooms');
   const rooms = providerRooms();
-  const multi = rooms.length > 1;
+  const codexSidebar = store.mode !== 'demo' && store.activeProvider === 'codex';
+  const chats = codexSidebar ? shown(providerSessions()).slice().sort((a, b) => b.lastEventAt - a.lastEventAt) : [];
+  const multi = rooms.length > 1 || codexSidebar;
+  const showChats = codexSidebar && sidebarView === 'chats';
   box.hidden = !multi;
+  box.setAttribute('aria-label', showChats ? 'Codex chats' : 'Rooms');
+  document.body.classList.toggle('codex-sidebar', codexSidebar);
   document.body.classList.toggle('has-rooms', multi);
   if (!multi) return;
-  const sig = rooms
+  const sig = [sidebarView, store.activeProvider, store.showOffline, store.selectedId ?? '', ...rooms
     .map((r) => {
       const st = roomStats(r.id);
       return `${r.id}:${r.name}:${st.needs}:${st.working}:${r.id === store.room ? 1 : 0}`;
-    })
-    .join('|');
+    }), ...chats.map((s) => `${s.id}:${s.title}:${s.room}:${s.state}:${s.lastEventAt}`)].join('|');
   if (sig === roomsSig) return;
   roomsSig = sig;
   const hadFocus = box.contains(document.activeElement);
+  const focusedSidebarItem = document.activeElement as HTMLElement;
+  const focusedChatId = focusedSidebarItem.dataset.chatId;
+  const focusedSidebarView = focusedSidebarItem.dataset.sidebarView;
   const rows = rooms.map((r) => {
     const st = roomStats(r.id);
     const btn = h(
@@ -246,11 +255,38 @@ function renderRooms(): void {
     );
     return h('li', {}, btn);
   });
-  $('room-list').replaceChildren(...rows);
-  $('rooms-count').textContent = String(rooms.length);
-  const cur = $('room-list').querySelector<HTMLElement>('[aria-current="true"]');
+  const roomList = $('room-list');
+  const chatList = $('chat-list');
+  roomList.hidden = showChats;
+  chatList.hidden = !showChats;
+  roomList.replaceChildren(...rows);
+  const chatRows = chats.map((s) => {
+    const dot = h('i', { class: 'dot', attrs: { 'aria-label': stateText(s) } });
+    dot.style.background = STATE_COLOR[s.state];
+    return h('li', {}, h('button', {
+      class: 'chat-entry',
+      attrs: { type: 'button', 'data-chat-id': s.id, 'aria-current': String(s.id === store.selectedId), title: s.title, 'aria-label': s.title },
+    }, dot,
+    h('span', { class: 'chat-copy' }, h('span', { class: 'chat-title', text: s.title }))));
+  });
+  chatList.replaceChildren(...chatRows);
+  $('rooms-heading').textContent = showChats ? 'Chats' : 'Rooms';
+  $('rooms-count').textContent = String(showChats ? chats.length : rooms.length);
+  const tabs = $('sidebar-tabs');
+  tabs.hidden = !codexSidebar;
+  for (const button of tabs.querySelectorAll<HTMLButtonElement>('[data-sidebar-view]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.sidebarView === sidebarView));
+  }
+  const cur = (showChats ? chatList : roomList).querySelector<HTMLElement>('[aria-current="true"]');
   cur?.scrollIntoView({ block: 'nearest' });
-  if (hadFocus) cur?.focus({ preventScroll: true });
+  if (hadFocus) {
+    const focused = focusedSidebarView
+      ? [...tabs.querySelectorAll<HTMLElement>('[data-sidebar-view]')].find((item) => item.dataset.sidebarView === focusedSidebarView)
+      : focusedChatId && showChats
+        ? [...chatList.querySelectorAll<HTMLElement>('[data-chat-id]')].find((item) => item.dataset.chatId === focusedChatId)
+        : null;
+    (focused ?? cur)?.focus({ preventScroll: true });
+  }
 }
 
 /** Moves to another room (the agent panel closes unless the selected agent lives there). */
@@ -275,6 +311,7 @@ function switchProvider(provider: ProviderKey): void {
   if (!store.availableProviders.includes(provider)) return;
   localStorage.setItem(`ua.view.${store.activeProvider}`, store.view);
   store.activeProvider = provider;
+  sidebarView = provider === 'codex' && localStorage.getItem('ua.sidebar.codex') === 'rooms' ? 'rooms' : provider === 'codex' ? 'chats' : 'rooms';
   localStorage.setItem('ua.provider', provider);
   store.room = localStorage.getItem(`ua.room.${provider}`) ?? '';
   store.view = (localStorage.getItem(`ua.view.${provider}`) ?? (provider === 'codex' ? 'list' : '3d')) as '3d' | 'list';
@@ -518,6 +555,7 @@ function select(id: string | null): void {
   timelineBox.replaceChildren();
   scene.setSelected(id, panelPx());
   renderPanel();
+  renderRooms();
   renderList();
   if (id) void pollDetail();
 }
@@ -578,6 +616,15 @@ function boot(): void {
     if (open?.dataset.id) select(open.dataset.id);
     const room = t.closest<HTMLElement>('[data-room]');
     if (room?.dataset.room) switchRoom(room.dataset.room);
+    const chat = t.closest<HTMLElement>('[data-chat-id]');
+    if (chat?.dataset.chatId) select(chat.dataset.chatId);
+    const sidebarTab = t.closest<HTMLElement>('[data-sidebar-view]');
+    if (sidebarTab && (sidebarTab.dataset.sidebarView === 'chats' || sidebarTab.dataset.sidebarView === 'rooms')) {
+      sidebarView = sidebarTab.dataset.sidebarView;
+      if (store.activeProvider === 'codex') localStorage.setItem('ua.sidebar.codex', sidebarView);
+      roomsSig = '';
+      renderRooms();
+    }
     const provider = providerKey(t.closest<HTMLElement>('[data-provider]')?.dataset.provider ?? null);
     if (provider) switchProvider(provider);
     if (t.closest('#panel-close')) select(null);

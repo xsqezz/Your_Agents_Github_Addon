@@ -83,7 +83,7 @@ The numbers come from `session.rpc.quota.get()`, which only a Copilot session ca
 
 ## ChatGPT and Codex sessions
 
-ur-agents starts the official `codex app-server --listen stdio://` process and uses its JSON-RPC API to list non-archived local threads and load recent turn history. It follows every cursor page and lets the server repair its thread index, so named Worktree tasks remain discoverable even when their preview is empty. It finds the CLI bundled with the ChatGPT desktop app or uses `codex` on `PATH`. This avoids reading Codex's private database or rollout files. Threads are identified by their local project folder. The **All Codex threads** room shows every available thread, including child threads, and List view makes long titles readable; hovering a title shows its full text.
+ur-agents starts the official `codex app-server --listen stdio://` process and uses its JSON-RPC API to list non-archived local threads and load recent turn history. It follows every cursor page and lets the server repair its thread index, so named Worktree tasks remain discoverable even when their preview is empty. It finds the CLI bundled with the ChatGPT desktop app or uses `codex` on `PATH`. This avoids reading Codex's private database or rollout files. Threads are identified by their local project folder. The **Chats** tab in the left sidebar lists every available thread by its full title, including child threads; **Rooms** keeps the project-folder view, and **All Codex threads** groups them in the main view.
 
 Selecting **ChatGPT Codex** opens or activates the ChatGPT desktop app through its registered `codex://` link. If Windows has no handler installed, ur-agents reports the launch failure and keeps running.
 
