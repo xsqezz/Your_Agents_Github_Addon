@@ -39,33 +39,55 @@ function copySquirrelPackageIcon(iconPath: string): void {
   }
 }
 
-/** Create Squirrel-compatible shortcuts with the versioned executable as their icon source. */
+/** Create Squirrel-compatible shortcuts with an icon in the public Start Menu directory. */
 function createSquirrelShortcuts(): boolean {
   const quote = (value: string): string => `'${value.replace(/'/g, "''")}'`;
   const installRoot = path.resolve(path.dirname(process.execPath), '..');
   const appDirectory = path.dirname(process.execPath);
-  const iconLocation = `${process.execPath},0`;
+  const packageIcon = path.join(process.resourcesPath, 'ur-agents.ico');
   const script = `
 $ErrorActionPreference = 'Stop'
 $target = ${quote(path.join(installRoot, 'ur-agents.exe'))}
 $workingDirectory = ${quote(appDirectory)}
-$icon = ${quote(iconLocation)}
+$appId = 'com.squirrel.ur_agents.ur-agents'
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
 $startMenu = [IO.Path]::Combine($env:APPDATA, 'Microsoft\\Windows\\Start Menu\\Programs\\ur-agents')
 New-Item -ItemType Directory -Path $startMenu -Force | Out-Null
+$icon = [IO.Path]::Combine($startMenu, 'ur-agents.ico')
+Copy-Item -LiteralPath ${quote(packageIcon)} -Destination $icon -Force
 $links = @(
   [IO.Path]::Combine($desktop, 'ur-agents.lnk'),
   [IO.Path]::Combine($startMenu, 'ur-agents.lnk')
 )
+$propertyStoreSource = @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)] public struct UraPropertyKey { public Guid fmtid; public uint pid; }
+[StructLayout(LayoutKind.Explicit, Size=16)] public struct UraPropVariant { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr pwszVal; }
+[ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] public interface UraPropertyStore { [PreserveSig] int GetCount(out uint count); [PreserveSig] int GetAt(uint index, out UraPropertyKey key); [PreserveSig] int GetValue(ref UraPropertyKey key, out UraPropVariant value); [PreserveSig] int SetValue(ref UraPropertyKey key, ref UraPropVariant value); [PreserveSig] int Commit(); }
+public static class UraShortcutIdentity { [DllImport("shell32.dll", CharSet=CharSet.Unicode, PreserveSig=false)] static extern void SHGetPropertyStoreFromParsingName(string path, IntPtr bindCtx, uint flags, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out UraPropertyStore store); [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr CreateFile(string path, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template); [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern uint GetFinalPathNameByHandle(IntPtr handle, StringBuilder path, uint length, uint flags); [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle); public static string ResolveFinalPath(string path) { IntPtr handle = CreateFile(path, 0x80000000, 7, IntPtr.Zero, 3, 0x02000080, IntPtr.Zero); if (handle == new IntPtr(-1)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); try { StringBuilder result = new StringBuilder(4096); uint length = GetFinalPathNameByHandle(handle, result, (uint)result.Capacity, 0); if (length == 0 || length >= result.Capacity) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); string finalPath = result.ToString(); if (finalPath.Length >= 4 && finalPath[0] == (char)92 && finalPath[1] == (char)92 && finalPath[2] == '?' && finalPath[3] == (char)92) return finalPath.Substring(4); return finalPath; } finally { CloseHandle(handle); } } static void SetString(string path, uint propertyId, string text) { Guid iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"); UraPropertyStore store; SHGetPropertyStoreFromParsingName(path, IntPtr.Zero, 2, ref iid, out store); UraPropertyKey key = new UraPropertyKey { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = propertyId }; UraPropVariant value = new UraPropVariant { vt = 31, pwszVal = Marshal.StringToCoTaskMemUni(text) }; try { Marshal.ThrowExceptionForHR(store.SetValue(ref key, ref value)); Marshal.ThrowExceptionForHR(store.Commit()); } finally { Marshal.FreeCoTaskMem(value.pwszVal); Marshal.ReleaseComObject(store); } } public static void SetRelaunchIcon(string path, string icon) { SetString(path, 3, icon); } public static void SetAppId(string path, string appId) { SetString(path, 5, appId); } }
+public static class UraShellRefresh { [DllImport("shell32.dll", CharSet=CharSet.Unicode)] public static extern void SHChangeNotify(uint eventId, uint flags, string path, IntPtr item); }
+'@
+Add-Type -TypeDefinition $propertyStoreSource
+$target = [UraShortcutIdentity]::ResolveFinalPath($target)
+$workingDirectory = [UraShortcutIdentity]::ResolveFinalPath($workingDirectory)
 $shell = New-Object -ComObject WScript.Shell
 foreach ($linkPath in $links) {
   $link = $shell.CreateShortcut($linkPath)
   $link.TargetPath = $target
   $link.WorkingDirectory = $workingDirectory
-  $link.IconLocation = $icon
+  $link.WindowStyle = 1
+  $link.IconLocation = \"$icon,0\"
   $link.Description = 'Monitor GitHub Copilot and ChatGPT Codex agents'
   $link.Save()
+  [UraShortcutIdentity]::SetRelaunchIcon($linkPath, \"$icon,0\")
+  [UraShortcutIdentity]::SetAppId($linkPath, $appId)
+  [UraShellRefresh]::SHChangeNotify(0x00002000, 0x0005, $linkPath, [IntPtr]::Zero)
 }
+$icon = \"$icon,0\"
+[UraShellRefresh]::SHChangeNotify(0x00002000, 0x0005, $target, [IntPtr]::Zero)
+[UraShellRefresh]::SHChangeNotify(0x08000000, 0, $null, [IntPtr]::Zero)
 $uninstallRoot = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
 Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue | ForEach-Object {
   $entry = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
@@ -77,9 +99,13 @@ Get-ChildItem $uninstallRoot -ErrorAction SilentlyContinue | ForEach-Object {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
   const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded], {
     windowsHide: true,
-    stdio: 'ignore',
+    encoding: 'utf8',
     timeout: 12_000,
   });
+  if (result.status !== 0) {
+    const diagnostic = [`status=${result.status}`, result.error?.message, result.stderr, result.stdout].filter(Boolean).join('\n');
+    try { fs.writeFileSync(path.join(installRoot, 'shortcut-setup-error.log'), diagnostic); } catch { /* best-effort diagnostic */ }
+  }
   return result.status === 0;
 }
 

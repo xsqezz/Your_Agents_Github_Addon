@@ -8,6 +8,7 @@ import { initCredits } from './credits.ts';
 import { initLauncher, openLauncher, renderLauncher, toast } from './launch.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
+import { providerFromClickTarget } from './provider-selection.ts';
 import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
 
 declare global {
@@ -625,7 +626,7 @@ function boot(): void {
       roomsSig = '';
       renderRooms();
     }
-    const provider = providerKey(t.closest<HTMLElement>('[data-provider]')?.dataset.provider ?? null);
+    const provider = providerFromClickTarget(t);
     if (provider) switchProvider(provider);
     if (t.closest('#panel-close')) select(null);
     const view = t.closest<HTMLElement>('[data-view]');

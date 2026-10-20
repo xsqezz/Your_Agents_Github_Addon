@@ -11,9 +11,12 @@ export async function launchProviderApp(
   window: WindowVisibility | null,
   schedule?: (callback: () => void, delayMs: number) => unknown,
 ): Promise<void> {
+  // Arm visibility recovery before ShellExecute; URI handlers can hide the caller after
+  // openExternal has already returned, so checking only the promise's completion is too early.
+  const recover = window ? keepWindowVisibleAfterProviderLaunch(window, schedule) : undefined;
   try {
     await openExternal(PROVIDERS[provider].appUrl);
   } finally {
-    if (window) keepWindowVisibleAfterProviderLaunch(window, schedule);
+    recover?.();
   }
 }
