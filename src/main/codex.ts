@@ -570,28 +570,32 @@ export class CodexSource implements Source {
   }
 }
 
-/** Combines Copilot and Codex without changing their provider-specific storage or controls. */
+/** Combines provider sources without changing their provider-specific storage or controls. */
 export class CombinedSource implements Source {
   private copilot: Source;
-  private codex: CodexSource;
+  private codex: Source;
+  private work?: Source;
   private copilotSnapshot: Snapshot = { rooms: [], sessions: [] };
   private codexSnapshot: Snapshot = { rooms: [], sessions: [] };
+  private workSnapshot: Snapshot = { rooms: [], sessions: [] };
   private onUpdate: (snapshot: Snapshot) => void = () => {};
   private lastJson = '';
 
-  constructor(copilot: Source, codex: CodexSource) {
+  constructor(copilot: Source, codex: Source, work?: Source) {
     this.copilot = copilot;
     this.codex = codex;
+    this.work = work;
   }
 
   info(): SourceInfo {
     const copilot = this.copilot.info();
     const codex = this.codex.info();
+    const work = this.work?.info();
     return {
       mode: copilot.mode,
       home: copilot.home,
-      providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)'])],
-      providerKeys: [...new Set([...(copilot.providerKeys ?? ['copilot']), ...(codex.providerKeys ?? ['codex'])])],
+      providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)']), ...(work?.providers ?? [])],
+      providerKeys: [...new Set([...(copilot.providerKeys ?? ['copilot']), ...(codex.providerKeys ?? ['codex']), ...(work?.providerKeys ?? [])])],
     };
   }
 
@@ -600,6 +604,7 @@ export class CombinedSource implements Source {
     await Promise.all([
       this.copilot.start((snapshot) => { this.copilotSnapshot = snapshot; this.publish(); }),
       this.codex.start((snapshot) => { this.codexSnapshot = snapshot; this.publish(); }),
+      ...(this.work ? [this.work.start((snapshot) => { this.workSnapshot = snapshot; this.publish(); })] : []),
     ]);
     this.publish();
   }
@@ -607,16 +612,18 @@ export class CombinedSource implements Source {
   stop(): void {
     this.copilot.stop();
     this.codex.stop();
+    this.work?.stop();
   }
 
   async detail(id: string, since: number): Promise<SessionDetail | null> {
+    if (id.startsWith('work:')) return this.work?.detail(id, since) ?? null;
     return id.startsWith(CODEX_ID) ? this.codex.detail(id, since) : this.copilot.detail(id, since);
   }
 
   private publish(): void {
     const snapshot: Snapshot = {
-      rooms: [...this.copilotSnapshot.rooms, ...this.codexSnapshot.rooms],
-      sessions: [...this.copilotSnapshot.sessions, ...this.codexSnapshot.sessions],
+      rooms: [...this.copilotSnapshot.rooms, ...this.codexSnapshot.rooms, ...this.workSnapshot.rooms],
+      sessions: [...this.copilotSnapshot.sessions, ...this.codexSnapshot.sessions, ...this.workSnapshot.sessions],
     };
     const json = JSON.stringify(snapshot);
     if (json === this.lastJson) return;

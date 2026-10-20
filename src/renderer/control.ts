@@ -42,7 +42,11 @@ async function run(command: ControlCommand, okText: string): Promise<boolean> {
   busy = true;
   setBusy(true);
   try {
-    const r = await window.ua.controlSend(s.id, command);
+    const r = s.provider === 'work'
+      ? command.type === 'send' ? await window.ua.workSend(s.id, command.text)
+        : command.type === 'abort' ? await window.ua.workCancel(s.id)
+          : { ok: false, error: 'This action is not available for ChatGPT Work API sessions.' }
+      : await window.ua.controlSend(s.id, command);
     flash(r.ok ? okText : (r.error ?? 'Failed'), !r.ok);
     return r.ok;
   } catch {
@@ -63,6 +67,7 @@ type Readiness = { ok: true } | { ok: false; notice: string; action?: { label: s
 
 function readiness(s: SessionSummary): Readiness {
   if (s.provider === 'codex') return { ok: false, notice: 'Codex threads are read-only here. Open the thread in the ChatGPT app to send messages, stop work or handle approvals.' };
+  if (s.provider === 'work') return { ok: true };
   if (!state) return { ok: false, notice: 'Connecting to the control service…' };
   if (!state.demo && state.install !== 'current') {
     const outdated = state.install === 'outdated';
@@ -146,12 +151,15 @@ export function renderControl(force = false): void {
   const interrupt = $<HTMLInputElement>('interrupt');
   const send = $<HTMLButtonElement>('send-btn');
   const stop = $<HTMLButtonElement>('stop-btn');
+  const interruptLabel = $('interrupt').closest<HTMLElement>('.toggle');
   const live = ready.ok;
   msg.disabled = !live;
   interrupt.disabled = !live;
   send.disabled = !live || busy;
-  stop.disabled = !live || busy;
-  msg.placeholder = live ? 'Message this agent…  (Enter to send, Shift+Enter for a new line)' : 'Control is not available for this agent';
+  stop.disabled = !live || busy || (s.provider === 'work' && !['thinking', 'tool', 'awaiting-input', 'awaiting-permission'].includes(s.state));
+  msg.placeholder = live ? s.provider === 'work' ? 'Message this ChatGPT Work task…  (Enter to send, Shift+Enter for a new line)' : 'Message this agent…  (Enter to send, Shift+Enter for a new line)' : 'Control is not available for this agent';
+  if (interruptLabel) interruptLabel.hidden = s.provider === 'work';
+  stop.textContent = s.provider === 'work' ? 'Cancel turn' : 'Stop';
   composer.dataset.ready = live ? '1' : '0';
 
   const noticeSig = live ? '' : `${ready.notice}|${ready.action?.label ?? ''}`;

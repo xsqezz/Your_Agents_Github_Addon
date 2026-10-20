@@ -26,6 +26,13 @@ declare global {
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
       signIn(): Promise<LaunchResult>;
+      workKeyStatus(): Promise<boolean>;
+      workSetApiKey(key: string): Promise<{ ok: boolean; error?: string }>;
+      workRemoveApiKey(): Promise<{ ok: boolean; error?: string }>;
+      workCreateSession(request: unknown): Promise<{ ok: boolean; error?: string; id?: string }>;
+      workSend(id: string, message: string): Promise<{ ok: boolean; error?: string }>;
+      workCancel(id: string): Promise<{ ok: boolean; error?: string }>;
+      openApiKeys(): Promise<{ ok: boolean; error?: string }>;
       openInCopilot(sessionId: string): Promise<{ ok: boolean; error?: string }>;
       openInCodex(sessionId: string): Promise<{ ok: boolean; error?: string }>;
       openProviderApp(provider: AgentProvider): Promise<{ ok: boolean; error?: string }>;
@@ -52,11 +59,11 @@ const params = new URLSearchParams(location.search);
 const CODEX_ALL_ROOM = 'codex:all';
 type ProviderKey = AgentProvider;
 const providerKey = (value: string | null): ProviderKey | null => value && Object.prototype.hasOwnProperty.call(PROVIDERS, value) ? value as ProviderKey : null;
-const activeProvider: ProviderKey = providerKey(params.get('provider')) ?? (params.get('room')?.startsWith('codex:') ? 'codex' : null) ?? providerKey(localStorage.getItem('ua.provider')) ?? 'copilot';
+const activeProvider: ProviderKey = providerKey(params.get('provider')) ?? (params.get('room')?.startsWith('codex:') ? 'codex' : params.get('room')?.startsWith('work:') ? 'work' : null) ?? providerKey(localStorage.getItem('ua.provider')) ?? 'copilot';
 const initialRoom = params.get('room') ?? localStorage.getItem(`ua.room.${activeProvider}`) ?? (activeProvider === 'copilot' ? localStorage.getItem('ua.room') : null) ?? '';
-const initialView = params.get('view') ?? localStorage.getItem(`ua.view.${activeProvider}`) ?? (activeProvider === 'codex' ? 'list' : localStorage.getItem('ua.view') ?? '3d');
+const initialView = params.get('view') ?? localStorage.getItem(`ua.view.${activeProvider}`) ?? (['codex', 'work'].includes(activeProvider) ? 'list' : localStorage.getItem('ua.view') ?? '3d');
 type SidebarView = 'rooms' | 'chats';
-let sidebarView: SidebarView = activeProvider === 'codex' && localStorage.getItem('ua.sidebar.codex') !== 'rooms' ? 'chats' : 'rooms';
+let sidebarView: SidebarView = ['codex', 'work'].includes(activeProvider) && localStorage.getItem(`ua.sidebar.${activeProvider}`) !== 'rooms' ? 'chats' : 'rooms';
 const store = {
   all: [] as SessionSummary[],
   rooms: [] as RoomInfo[],
@@ -85,7 +92,7 @@ let primed = false;
 
 const providerSessions = (): SessionSummary[] => store.mode === 'demo' ? store.all : store.all.filter((s) => (s.provider ?? 'copilot') === store.activeProvider);
 const providerRooms = (): RoomInfo[] => store.mode === 'demo' ? store.rooms : store.rooms.filter((r) => (r.provider ?? 'copilot') === store.activeProvider);
-const roomSessions = (id: string): SessionSummary[] => store.activeProvider === 'codex' && id === CODEX_ALL_ROOM ? providerSessions() : providerSessions().filter((s) => s.room === id);
+const roomSessions = (id: string): SessionSummary[] => (store.activeProvider === 'codex' && id === CODEX_ALL_ROOM) || (store.activeProvider === 'work' && id === 'work:all') ? providerSessions() : providerSessions().filter((s) => s.room === id);
 const shown = (list: SessionSummary[]): SessionSummary[] => (store.showOffline ? list : list.filter((s) => s.state !== 'offline'));
 /** Agents in the room you are in. */
 const visible = (): SessionSummary[] => shown(roomSessions(store.room));
@@ -148,6 +155,13 @@ function openProviderApp(provider: ProviderKey): void {
 }
 
 function openCopilotLauncher(): void {
+  if (store.mode !== 'demo' && store.activeProvider === 'work') {
+    void window.ua.workKeyStatus().then((configured) => {
+      if (configured) openLauncher();
+      else openApiKeyDialog(openLauncher);
+    }).catch(() => toast('Could not check the OpenAI API key.', true));
+    return;
+  }
   if (store.mode !== 'demo' && store.activeProvider !== 'copilot') {
     toast('Start a Codex Local or Worktree task in the ChatGPT app.');
     return;
@@ -183,13 +197,14 @@ function renderTopbar(): void {
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === store.view));
   renderProviderSwitch();
   $('control-option').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
+  $('work-key-settings').hidden = store.mode === 'demo' || store.activeProvider !== 'work';
   $('credits').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
   ($('show-offline') as HTMLInputElement).checked = store.showOffline;
   $('overview').hidden = store.view !== '3d';
   const newAgent = $<HTMLButtonElement>('new-agent');
-  newAgent.hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
+  newAgent.hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot' && store.activeProvider !== 'work';
   newAgent.disabled = !currentRoom()?.canLaunch;
-  newAgent.title = currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the ChatGPT app to add it here';
+  newAgent.title = currentRoom()?.canLaunch ? store.activeProvider === 'work' ? 'Start a new ChatGPT Work API task (N)' : 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the ChatGPT app to add it here';
 }
 
 /* ───────────── rooms ───────────── */
@@ -208,12 +223,12 @@ let roomsSig = '';
 function renderRooms(): void {
   const box = $('rooms');
   const rooms = providerRooms();
-  const codexSidebar = store.mode !== 'demo' && store.activeProvider === 'codex';
-  const chats = codexSidebar ? shown(providerSessions()).slice().sort((a, b) => b.lastEventAt - a.lastEventAt) : [];
-  const multi = rooms.length > 1 || codexSidebar;
-  const showChats = codexSidebar && sidebarView === 'chats';
+  const chatSidebar = store.mode !== 'demo' && ['codex', 'work'].includes(store.activeProvider);
+  const chats = chatSidebar ? shown(providerSessions()).slice().sort((a, b) => b.lastEventAt - a.lastEventAt) : [];
+  const multi = rooms.length > 1 || chatSidebar;
+  const showChats = chatSidebar && sidebarView === 'chats';
   box.hidden = !multi;
-  box.setAttribute('aria-label', showChats ? 'Codex chats' : 'Rooms');
+  box.setAttribute('aria-label', showChats ? `${providerLabel()} chats` : 'Rooms');
   document.body.classList.toggle('has-rooms', multi);
   if (!multi) return;
   const sig = [sidebarView, store.activeProvider, store.showOffline, store.selectedId ?? '', ...rooms
@@ -257,7 +272,7 @@ function renderRooms(): void {
   $('rooms-heading').textContent = showChats ? 'Chats' : 'Rooms';
   $('rooms-count').textContent = String(showChats ? chats.length : rooms.length);
   const tabs = $('sidebar-tabs');
-  tabs.hidden = !codexSidebar;
+  tabs.hidden = !chatSidebar;
   for (const button of tabs.querySelectorAll<HTMLButtonElement>('[data-sidebar-view]')) {
     button.setAttribute('aria-pressed', String(button.dataset.sidebarView === sidebarView));
   }
@@ -284,21 +299,33 @@ function switchRoom(id: string, keepSelection = false): void {
   render();
 }
 
-function switchProvider(provider: ProviderKey): void {
-  if (!store.availableProviders.includes(provider)) return;
+let afterWorkKeySaved: (() => void) | null = null;
+
+function openApiKeyDialog(afterSaved?: () => void): void {
+  afterWorkKeySaved = afterSaved ?? null;
+  const dialog = $<HTMLDialogElement>('api-key-dialog');
+  $('api-key-error').textContent = '';
+  $('api-key-error').hidden = true;
+  void window.ua.workKeyStatus().then((configured) => {
+    $('remove-api-key').hidden = !configured;
+    if (!dialog.open) dialog.showModal();
+    $<HTMLInputElement>('api-key-input').focus();
+  });
+}
+
+function activateProvider(provider: ProviderKey): void {
   const picker = $('provider-picker') as HTMLDialogElement;
   if (picker.open) picker.close();
   if (provider === store.activeProvider) {
     openProviderApp(provider);
     return;
   }
-  if (!store.availableProviders.includes(provider)) return;
   localStorage.setItem(`ua.view.${store.activeProvider}`, store.view);
   store.activeProvider = provider;
-  sidebarView = provider === 'codex' && localStorage.getItem('ua.sidebar.codex') === 'rooms' ? 'rooms' : provider === 'codex' ? 'chats' : 'rooms';
+  sidebarView = ['codex', 'work'].includes(provider) && localStorage.getItem(`ua.sidebar.${provider}`) === 'rooms' ? 'rooms' : ['codex', 'work'].includes(provider) ? 'chats' : 'rooms';
   localStorage.setItem('ua.provider', provider);
   store.room = localStorage.getItem(`ua.room.${provider}`) ?? '';
-  store.view = (localStorage.getItem(`ua.view.${provider}`) ?? (provider === 'codex' ? 'list' : '3d')) as '3d' | 'list';
+  store.view = (localStorage.getItem(`ua.view.${provider}`) ?? (['codex', 'work'].includes(provider) ? 'list' : '3d')) as '3d' | 'list';
   localStorage.setItem('ua.view', store.view);
   migrateCodexDefaultRoom();
   store.roomPinned = store.room !== '';
@@ -313,6 +340,19 @@ function switchProvider(provider: ProviderKey): void {
   render();
   scene.frameAll(true);
   openProviderApp(provider);
+}
+
+function switchProvider(provider: ProviderKey): void {
+  if (!store.availableProviders.includes(provider)) return;
+  if (provider !== 'work') { activateProvider(provider); return; }
+  void window.ua.workKeyStatus().then((configured) => {
+    if (configured) activateProvider(provider);
+    else {
+      const picker = $('provider-picker') as HTMLDialogElement;
+      if (picker.open) picker.close();
+      openApiKeyDialog(() => activateProvider(provider));
+    }
+  }).catch(() => toast('Could not check the OpenAI API key.', true));
 }
 
 function stepRoom(dir: number): void {
@@ -357,7 +397,7 @@ function renderList(): void {
       h('td', { text: `${FAMILY_LABEL[s.family]} · ${s.model || '?'}` }),
       h('td', { class: 'c-act', text: s.state === 'offline' ? '' : s.activity }),
       ctx,
-      h('td', { text: s.costAiu != null ? `${s.costAiu.toFixed(1)} AIU` : '–' }),
+      h('td', { text: s.costUsd != null ? `$${s.costUsd.toFixed(2)}${s.costUsdLimit != null ? ` / $${s.costUsdLimit.toFixed(2)}` : ''}` : s.costAiu != null ? `${s.costAiu.toFixed(1)} AIU` : '–' }),
       h('td', { text: s.lastEventAt ? ago(s.lastEventAt, now) : '–' }));
     if (s.id === store.selectedId) tr.classList.add('is-selected');
     body.append(tr);
@@ -434,13 +474,14 @@ function renderPanel(): void {
   const dot = h('i', { class: 'dot' });
   dot.style.background = STATE_COLOR[s.state];
   const isCodex = s.provider === 'codex';
-  const openInApp = h('button', { class: 'btn small', text: isCodex ? 'Open in ChatGPT' : 'Open in Copilot', attrs: { type: 'button', title: isCodex ? 'Open this thread in the ChatGPT desktop app' : 'Open this session in the GitHub Copilot app' } });
+  const isWork = s.provider === 'work';
+  const openInApp = h('button', { class: 'btn small', text: isCodex ? 'Open in ChatGPT' : isWork ? 'Open ChatGPT' : 'Open in Copilot', attrs: { type: 'button', title: isCodex ? 'Open this thread in the ChatGPT desktop app' : isWork ? 'Open the ChatGPT desktop app' : 'Open this session in the GitHub Copilot app' } });
   openInApp.addEventListener('click', () => {
-    const opening = isCodex ? window.ua.openInCodex(s.id) : window.ua.openInCopilot(s.id);
+    const opening = isCodex ? window.ua.openInCodex(s.id) : isWork ? window.ua.openProviderApp('work') : window.ua.openInCopilot(s.id);
     void opening.then((r) => {
-      const appName = isCodex ? 'ChatGPT' : 'GitHub Copilot';
+      const appName = isCodex || isWork ? 'ChatGPT' : 'GitHub Copilot';
       toast(r.ok ? `Opened this session in ${appName}.` : (r.error ?? `Could not open ${appName}.`), !r.ok);
-    }).catch(() => toast(`Could not open ${isCodex ? 'ChatGPT' : 'GitHub Copilot'}.`, true));
+    }).catch(() => toast(`Could not open ${isCodex || isWork ? 'ChatGPT' : 'GitHub Copilot'}.`, true));
   });
   head.replaceChildren(
     h('div', { class: 'ph-row' },
@@ -483,7 +524,7 @@ function renderInfo(s: SessionSummary): void {
   }
 
   const copy = h('button', { class: 'link-btn', text: 'Copy', attrs: { type: 'button' } });
-  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.provider === 'codex' ? s.id.slice('codex:'.length) : s.id));
+  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.provider === 'codex' ? s.id.slice('codex:'.length) : s.provider === 'work' ? s.id.slice('work:'.length) : s.id));
 
   const dl = h('dl', { class: 'kv' },
     ...kv('Status', `${stateText(s)}${s.state === 'offline' ? '' : ` since ${ago(s.stateSince, now)} ago`}`),
@@ -491,7 +532,7 @@ function renderInfo(s: SessionSummary): void {
     ...kv('Model', `${s.model || 'unknown'} (${FAMILY_LABEL[s.family]})`),
     ...kv('Mode', s.mode ?? '–'),
     ...kv('Context', ctx),
-    ...kv('Cost', s.costAiu != null ? `${s.costAiu.toFixed(2)} AIU${s.premiumRequests != null ? ` · ${s.premiumRequests} premium requests` : ''}` : '–'),
+    ...kv('Cost', s.costUsd != null ? `$${s.costUsd.toFixed(2)}${s.costUsdLimit != null ? ` / $${s.costUsdLimit.toFixed(2)}` : ''}` : s.costAiu != null ? `${s.costAiu.toFixed(2)} AIU${s.premiumRequests != null ? ` · ${s.premiumRequests} premium requests` : ''}` : '–'),
     ...kv('Activity', `${s.toolCalls} tool calls · ${s.turns} turns · ${s.hooks} hook runs`),
     ...kv('Last event', s.lastEventAt ? `${ago(s.lastEventAt, now)} ago` : '–'),
     ...kv('Sub-agents', s.subagents.length ? subs : 'none'),
@@ -503,7 +544,7 @@ function renderInfo(s: SessionSummary): void {
     dl,
     h('section', { class: 'note' },
       h('h3', { text: 'Controls' }),
-      h('p', { text: s.provider === 'codex' ? 'History is read through the official local Codex App Server. Open this thread in the ChatGPT app to reply, stop the task or handle approval requests.' : 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
+      h('p', { text: s.provider === 'codex' ? 'History is read through the official local Codex App Server. Open this thread in the ChatGPT app to reply, stop the task or handle approval requests.' : s.provider === 'work' ? 'This is a separate OpenAI Agents API session in an OpenAI-hosted environment. Messages and stop controls are managed here. Usage is billed to your Platform project; it does not use your ChatGPT subscription.' : 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
   );
 }
 
@@ -517,7 +558,7 @@ async function pollDetail(): Promise<void> {
     if (d && store.selectedId === id) {
       store.since = d.rev;
       mergeItems(d.items);
-      $('src').textContent = d.source?.startsWith('Codex App Server') ? d.source : d.source ? 'live from events.jsonl' : 'no event log for this session';
+      $('src').textContent = d.source?.startsWith('Codex App Server') || d.source?.startsWith('OpenAI Agents API') ? d.source : d.source ? 'live from events.jsonl' : 'no event log for this session';
     }
   } finally {
     pollBusy = false;
@@ -557,7 +598,7 @@ function render(): void {
     emptyEl.querySelector('h2')!.textContent = currentRoom() ? `All desks are free in ${currentRoom()!.name}` : `No ${providerLabel()} sessions yet`;
     emptyEl.querySelector('p')!.textContent = hidden
       ? `${hidden} past session${hidden > 1 ? 's are' : ' is'} hidden here. Turn on “Show offline” to seat them.`
-      : store.activeProvider === 'codex' ? 'Start a Codex Local or Worktree task in ChatGPT; it will appear here.' : 'No agent has worked in this folder yet. Click a desk to start one.';
+      : store.activeProvider === 'codex' ? 'Start a Codex Local or Worktree task in ChatGPT; it will appear here.' : store.activeProvider === 'work' ? 'Start a ChatGPT Work API task to see it here.' : 'No agent has worked in this folder yet. Click a desk to start one.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
@@ -604,7 +645,7 @@ function boot(): void {
     const sidebarTab = t.closest<HTMLElement>('[data-sidebar-view]');
     if (sidebarTab && (sidebarTab.dataset.sidebarView === 'chats' || sidebarTab.dataset.sidebarView === 'rooms')) {
       sidebarView = sidebarTab.dataset.sidebarView;
-      if (store.activeProvider === 'codex') localStorage.setItem('ua.sidebar.codex', sidebarView);
+      if (['codex', 'work'].includes(store.activeProvider)) localStorage.setItem(`ua.sidebar.${store.activeProvider}`, sidebarView);
       roomsSig = '';
       renderRooms();
     }
@@ -631,9 +672,57 @@ function boot(): void {
     }
     if (t.closest('#overview')) scene.frameAll(true);
     if (t.closest('#new-agent')) openCopilotLauncher();
+    if (t.closest('#work-key-settings')) openApiKeyDialog();
     const winBtn = t.closest<HTMLElement>('[data-win]');
     if (winBtn) window.ua.winAction(winBtn.dataset.win as 'minimize' | 'maximize' | 'close');
   });
+  const apiKeyDialog = $<HTMLDialogElement>('api-key-dialog');
+  $('api-key-cancel').addEventListener('click', () => { afterWorkKeySaved = null; apiKeyDialog.close(); });
+  $('open-api-keys').addEventListener('click', () => {
+    void window.ua.openApiKeys().then((result) => { if (!result.ok) toast(result.error ?? 'Could not open the OpenAI Platform.', true); });
+  });
+  $('remove-api-key').addEventListener('click', () => {
+    if (!confirm('Remove the saved OpenAI API key from this computer?')) return;
+    void window.ua.workRemoveApiKey().then((result) => {
+      if (!result.ok) { $('api-key-error').textContent = result.error ?? 'Could not remove the API key.'; $('api-key-error').hidden = false; return; }
+      $<HTMLInputElement>('api-key-input').value = '';
+      $('remove-api-key').hidden = true;
+      apiKeyDialog.close();
+      afterWorkKeySaved = null;
+      toast('OpenAI API key removed.');
+      if (store.activeProvider === 'work' && store.availableProviders.includes('copilot')) activateProvider('copilot');
+    });
+  });
+  $<HTMLFormElement>('api-key-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $<HTMLInputElement>('api-key-input');
+    const save = $<HTMLButtonElement>('api-key-save');
+    const error = $('api-key-error');
+    const key = input.value.trim();
+    if (!key) { error.textContent = 'Paste an OpenAI API key to continue.'; error.hidden = false; input.focus(); return; }
+    save.disabled = true;
+    save.textContent = 'Checking…';
+    error.hidden = true;
+    try {
+      const result = await window.ua.workSetApiKey(key);
+      if (!result.ok) { error.textContent = result.error ?? 'Could not validate this key.'; error.hidden = false; return; }
+      input.value = '';
+      apiKeyDialog.close();
+      toast('OpenAI API key checked and saved securely.');
+      const next = afterWorkKeySaved;
+      afterWorkKeySaved = null;
+      next?.();
+    } catch {
+      input.value = '';
+      error.textContent = 'Could not reach the API service.';
+      error.hidden = false;
+    } finally {
+      save.disabled = false;
+      save.textContent = 'Check and save key';
+    }
+  });
+  apiKeyDialog.addEventListener('close', () => { $<HTMLInputElement>('api-key-input').value = ''; });
+  apiKeyDialog.addEventListener('cancel', () => { afterWorkKeySaved = null; });
   window.ua.onWinState((s) => {
     document.body.classList.toggle('maximized', s.maximized);
     document.body.classList.toggle('fullscreen', s.fullscreen);
@@ -722,12 +811,14 @@ async function start(): Promise<void> {
   store.rooms = snap.rooms;
   announce(store.all);
   render();
-  if (store.mode !== 'demo') {
+  if (store.mode !== 'demo' && store.activeProvider === 'work' && !(await window.ua.workKeyStatus())) {
+    openApiKeyDialog(() => openProviderApp('work'));
+  } else if (store.mode !== 'demo') {
     const hasSelectedSession = params.get('select') !== null && params.get('select') !== '';
     if (hasSelectedSession || params.get('launch') === '1' || store.availableProviders.length < 2) openProviderApp(store.activeProvider);
     else ($('provider-picker') as HTMLDialogElement).showModal();
   }
-  if (params.get('launch') === '1' && store.activeProvider === 'copilot') setTimeout(openCopilotLauncher, 800);
+  if (params.get('launch') === '1' && ['copilot', 'work'].includes(store.activeProvider)) setTimeout(openCopilotLauncher, 800);
   const nums = (key: string): [number, number, number] | null => {
     const p = params.get(key)?.split(',').map(Number);
     return p && p.length === 3 && p.every(Number.isFinite) ? (p as [number, number, number]) : null;

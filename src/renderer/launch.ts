@@ -36,14 +36,23 @@ function showError(text: string, needsLogin = false): void {
 function refresh(): void {
   const room = getRoom();
   const state = controlState();
+  const workApi = room?.provider === 'work';
   const dlg = $<HTMLDialogElement>('launch');
   $('launch-room').textContent = room?.name ?? '';
+  $('launch-title').textContent = workApi ? 'New ChatGPT Work task' : 'New agent';
+  $('launch-hint').textContent = workApi
+    ? 'Runs in an OpenAI-hosted cloud workspace, separate from your local folder and ChatGPT subscription. API and sandbox usage are billed to your Platform project. Only public GitHub repositories can be cloned here; network access is disabled unless you enable it below.'
+    : 'It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.';
+  $('launch-model').setAttribute('placeholder', workApi ? 'gpt-6-astra' : 'Default');
+  $('launch-name').setAttribute('placeholder', workApi ? 'Shown in ur-agents' : 'Shown in the Copilot app');
+  for (const el of dlg.querySelectorAll<HTMLElement>('.copilot-only')) el.hidden = workApi;
+  for (const el of dlg.querySelectorAll<HTMLElement>('.work-only')) el.hidden = !workApi;
   const notice = $('launch-notice');
   let text = '';
   let action = false;
   if (!room?.canLaunch) text = 'This room has no folder of its own, so an agent cannot start here. Pick a project room.';
-  else if (!state) text = 'Connecting to the control service…';
-  else if (!state.enabled) {
+  else if (!workApi && !state) text = 'Connecting to the control service…';
+  else if (!workApi && state && !state.enabled) {
     text = 'Starting agents needs Control. Turn it on to continue.';
     action = true;
   }
@@ -101,27 +110,37 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
     e.preventDefault();
     const room = getRoom();
     if (!room || busy) return;
-    if ($<HTMLSelectElement>('launch-access').value === 'full' && !confirm('Full access lets this agent read and write anywhere on your computer and open any URL, with no prompts.\n\nStart it anyway?')) return;
+    if (room.provider !== 'work' && $<HTMLSelectElement>('launch-access').value === 'full' && !confirm('Full access lets this agent read and write anywhere on your computer and open any URL, with no prompts.\n\nStart it anyway?')) return;
     busy = true;
     refresh();
     showError('');
     try {
-      const r = await window.ua.launch({
-        room: room.id,
-        prompt: $<HTMLTextAreaElement>('launch-prompt').value,
-        model: $<HTMLInputElement>('launch-model').value,
-        mode: $<HTMLSelectElement>('launch-mode').value,
-        effort: $<HTMLSelectElement>('launch-effort').value as LaunchEffort | '',
-        access: $<HTMLSelectElement>('launch-access').value,
-        name: $<HTMLInputElement>('launch-name').value,
-      });
+      const r = room.provider === 'work'
+        ? await window.ua.workCreateSession({
+          title: $<HTMLInputElement>('launch-name').value,
+          prompt: $<HTMLTextAreaElement>('launch-prompt').value,
+          model: $<HTMLInputElement>('launch-model').value,
+          effort: $<HTMLSelectElement>('launch-effort').value as LaunchEffort | '',
+          maxSpendUsd: Number($<HTMLInputElement>('launch-spend').value),
+          repositoryUrl: $<HTMLInputElement>('launch-repository').value,
+          allowNetwork: $<HTMLInputElement>('launch-network').checked,
+        })
+        : await window.ua.launch({
+          room: room.id,
+          prompt: $<HTMLTextAreaElement>('launch-prompt').value,
+          model: $<HTMLInputElement>('launch-model').value,
+          mode: $<HTMLSelectElement>('launch-mode').value,
+          effort: $<HTMLSelectElement>('launch-effort').value as LaunchEffort | '',
+          access: $<HTMLSelectElement>('launch-access').value,
+          name: $<HTMLInputElement>('launch-name').value,
+        });
       if (r.ok) {
         $<HTMLTextAreaElement>('launch-prompt').value = '';
         $<HTMLInputElement>('launch-name').value = '';
         dlg.close();
-        toast(r.note ?? `Agent started in ${room.name}. It takes a desk in a moment.`);
+        toast(('id' in r && r.id) ? 'ChatGPT Work task started in the hosted workspace.' : ('note' in r ? r.note : undefined) ?? `Agent started in ${room.name}. It takes a desk in a moment.`);
       } else {
-        showError(r.error ?? 'Could not start the agent.', r.needsLogin);
+        showError(r.error ?? 'Could not start the agent.', 'needsLogin' in r && r.needsLogin === true);
       }
     } catch {
       showError('Could not reach the app backend.');

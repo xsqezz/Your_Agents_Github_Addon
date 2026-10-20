@@ -27,6 +27,7 @@
       <div id="counts" role="status" aria-label="Agent counts"></div>
       <div class="spacer"></div>
       <label id="control-option" class="toggle" title="Let ur-agents send messages, stop agents and answer or approve requests"><input type="checkbox" id="control-toggle" /><span>Control</span></label>
+      <button id="work-key-settings" type="button" class="btn small" hidden>API key</button>
       <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
       <button id="new-agent" type="button" class="btn" title="Start a new agent in this room (N)">New agent</button>
       <button id="overview" type="button" class="btn">Overview</button>
@@ -80,12 +81,12 @@
 
     <aside id="rooms" hidden aria-label="Rooms">
       <div class="rooms-head"><span id="rooms-heading">Rooms</span><span id="rooms-count"></span></div>
-      <div id="sidebar-tabs" class="sidebar-tabs" role="group" aria-label="Codex sidebar view" hidden>
+      <div id="sidebar-tabs" class="sidebar-tabs" role="group" aria-label="Chat sidebar view" hidden>
         <button type="button" data-sidebar-view="chats" aria-pressed="true">Chats</button>
         <button type="button" data-sidebar-view="rooms" aria-pressed="false">Rooms</button>
       </div>
       <ul id="room-list"></ul>
-      <ul id="chat-list" hidden aria-label="Codex chats"></ul>
+      <ul id="chat-list" hidden aria-label="Chats"></ul>
       <section id="credits" aria-label="Monthly AI credits"></section>
     </aside>
 
@@ -120,24 +121,36 @@
             <input id="launch-model" type="text" list="launch-models" placeholder="Default" spellcheck="false" />
             <datalist id="launch-models"></datalist>
           </label>
-          <label class="field">
+          <label class="field copilot-only">
             <span>Reasoning effort</span>
             <select id="launch-effort"></select>
           </label>
-          <label class="field">
+          <label class="field copilot-only">
             <span>Mode</span>
             <select id="launch-mode"></select>
           </label>
-          <label class="field">
+          <label class="field copilot-only">
             <span>Permissions</span>
             <select id="launch-access"></select>
+          </label>
+          <label class="field work-only" hidden>
+            <span>GitHub repository <i>(public)</i></span>
+            <input id="launch-repository" type="url" placeholder="https://github.com/owner/repository" spellcheck="false" />
+          </label>
+          <label class="field work-only" hidden>
+            <span>Session spending limit (USD)</span>
+            <input id="launch-spend" type="number" min="0.01" max="100000" step="0.01" value="5.00" />
+          </label>
+          <label class="field toggle-field work-only" hidden>
+            <span>Network access</span>
+            <span class="toggle"><input id="launch-network" type="checkbox" /><span>Allow unrestricted internet access</span></span>
           </label>
         </div>
         <label class="field">
           <span>Name <i>(optional)</i></span>
           <input id="launch-name" type="text" maxlength="80" placeholder="Shown in the Copilot app" />
         </label>
-        <p class="hint">It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.</p>
+        <p id="launch-hint" class="hint">It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.</p>
         <div id="launch-error-box" class="errbox" hidden>
           <p id="launch-error" class="error" role="alert"></p>
           <button type="button" id="launch-signin" class="btn small primary" hidden>Sign in to Copilot</button>
@@ -149,6 +162,27 @@
       </form>
     </dialog>
     <div id="scrim" hidden></div>
+
+    <dialog id="api-key-dialog" aria-labelledby="api-key-title">
+      <form id="api-key-form" class="provider-picker-content" autocomplete="off">
+        <p class="provider-picker-kicker">ChatGPT Work · Agents API</p>
+        <h2 id="api-key-title">Connect your OpenAI API key</h2>
+        <p id="api-key-description">Use a project API key with <code>api.agents.read</code>, <code>api.agents.write</code> and <code>api.responses.write</code>. Work tasks run as separate OpenAI-hosted API sessions; model and sandbox usage is billed to your Platform project, not your ChatGPT subscription.</p>
+        <label class="field">
+          <span>OpenAI API key</span>
+          <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />
+        </label>
+        <p id="api-key-error" class="error" role="alert" hidden></p>
+        <div class="api-key-links">
+          <button id="open-api-keys" type="button" class="link-btn">Create or manage a key on platform.openai.com</button>
+          <button id="remove-api-key" type="button" class="link-btn danger-text" hidden>Remove saved key</button>
+        </div>
+        <footer>
+          <button id="api-key-cancel" type="button" class="btn">Cancel</button>
+          <button id="api-key-save" type="submit" class="btn primary">Check and save key</button>
+        </footer>
+      </form>
+    </dialog>
 
     <i class="grip" data-edge="n"></i><i class="grip" data-edge="s"></i><i class="grip" data-edge="e"></i><i class="grip" data-edge="w"></i>
     <i class="grip" data-edge="ne"></i><i class="grip" data-edge="nw"></i><i class="grip" data-edge="se"></i><i class="grip" data-edge="sw"></i>
