@@ -5,8 +5,8 @@ import type { Source, SourceInfo } from './source.ts';
 import { AgentsApiKeyStore } from './agents-api-key.ts';
 
 const BASE = 'https://api.openai.com/v1/agents';
-const ROOM_ID = 'work:all';
-const SESSION_ID = 'work:';
+const ROOM_ID = 'codex:api';
+const SESSION_ID = 'codex-api:';
 const POLL_MS = 4000;
 const DETAIL_CACHE_MS = 2500;
 const MAX_ITEMS = 500;
@@ -27,7 +27,7 @@ type ApiSession = {
 type ApiItem = Record<string, any>;
 type CursorPage<T> = { data?: T[]; has_more?: boolean; last_id?: string | null };
 type DetailCache = { fetchedAt: number; lastActiveAt: number; rev: number; items: TimelineItem[]; turns: number };
-export interface CreateWorkSessionRequest { title?: string; prompt: string; model?: string; effort?: string; maxSpendUsd?: number; repositoryUrl?: string; allowNetwork?: boolean }
+export interface CreateCodexApiSessionRequest { title?: string; prompt: string; model?: string; effort?: string; maxSpendUsd?: number; repositoryUrl?: string; allowNetwork?: boolean }
 export interface ApiOperationResult { ok: boolean; error?: string; id?: string }
 
 function epoch(value: unknown, fallback = Date.now()): number {
@@ -117,7 +117,8 @@ export class OpenAIAgentsSource implements Source {
   constructor(keys: AgentsApiKeyStore) { this.keys = keys; }
 
   info(): SourceInfo {
-    return { mode: 'live', home: 'OpenAI Agents API', providers: ['ChatGPT Work (Agents API)'], providerKeys: ['work'] };
+    // Agents API sessions are one part of the ChatGPT Codex provider, not a separate provider.
+    return { mode: 'live', home: 'OpenAI Agents API', providers: [], providerKeys: [] };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {
@@ -143,9 +144,9 @@ export class OpenAIAgentsSource implements Source {
 
   removeKey(): void { this.keys.remove(); this.sessions.clear(); this.details.clear(); this.publish(); }
 
-  async createSession(input: CreateWorkSessionRequest): Promise<ApiOperationResult> {
+  async createSession(input: CreateCodexApiSessionRequest): Promise<ApiOperationResult> {
     const prompt = typeof input?.prompt === 'string' ? input.prompt.trim() : '';
-    const title = (typeof input?.title === 'string' ? input.title.trim().slice(0, 80) : '') || firstLine(prompt).slice(0, 80) || 'New Work task';
+    const title = (typeof input?.title === 'string' ? input.title.trim().slice(0, 80) : '') || firstLine(prompt).slice(0, 80) || 'New Codex task';
     const model = (typeof input?.model === 'string' ? input.model.trim() : '') || 'gpt-6-astra';
     if (!prompt || prompt.length > 20_000) return { ok: false, error: 'Enter a task between 1 and 20,000 characters.' };
     if (!/^[A-Za-z0-9._:-]{1,100}$/.test(model)) return { ok: false, error: 'Enter a valid model name.' };
@@ -157,10 +158,10 @@ export class OpenAIAgentsSource implements Source {
     const dollars = input.maxSpendUsd ?? 5;
     if (!Number.isFinite(dollars) || dollars < 0.01 || dollars > 100_000) return { ok: false, error: 'Set a per-session limit from $0.01 to $100,000.' };
     const key = this.keys.read();
-    if (!key) return { ok: false, error: 'Add an OpenAI API key before starting a Work task.' };
+    if (!key) return { ok: false, error: 'Add an OpenAI API key before starting a Codex task.' };
     const instructions = repoUrl
       ? `Work in the public GitHub repository cloned at /workspace/repo. Make focused changes that satisfy the user request, inspect your changes, and report what you changed. Do not claim tests or commands passed unless you actually ran them.`
-      : 'Work in the hosted workspace. Make focused changes that satisfy the user request, inspect your work, and report what you completed. Do not claim tests or commands passed unless you actually ran them.';
+      : 'Work in the hosted Codex workspace. Make focused changes that satisfy the user request, inspect your work, and report what you completed. Do not claim tests or commands passed unless you actually ran them.';
     const environment: Record<string, unknown> = { type: 'openai_hosted' };
     if (input.allowNetwork === true) environment.network = { access: 'enabled' };
     else environment.network = repoUrl
@@ -195,7 +196,7 @@ export class OpenAIAgentsSource implements Source {
   async send(id: string, message: string): Promise<ApiOperationResult> {
     const sessionId = this.sessionId(id);
     const text = message.trim();
-    if (!sessionId) return { ok: false, error: 'Invalid Work session ID.' };
+    if (!sessionId) return { ok: false, error: 'Invalid Codex API session ID.' };
     if (!text || text.length > 20_000) return { ok: false, error: 'Enter a message up to 20,000 characters.' };
     try {
       await this.request(`/sessions/${encodeURIComponent(sessionId)}/events`, {
@@ -209,7 +210,7 @@ export class OpenAIAgentsSource implements Source {
 
   async cancel(id: string): Promise<ApiOperationResult> {
     const sessionId = this.sessionId(id);
-    if (!sessionId) return { ok: false, error: 'Invalid Work session ID.' };
+    if (!sessionId) return { ok: false, error: 'Invalid Codex API session ID.' };
     try {
       await this.request(`/sessions/${encodeURIComponent(sessionId)}/events`, {
         method: 'POST', body: JSON.stringify({ events: [{ type: 'agent.session.input.cancel' }] }),
@@ -233,14 +234,15 @@ export class OpenAIAgentsSource implements Source {
   }
 
   private sessionId(id: string): string | null {
-    if (!id.startsWith(SESSION_ID)) return null;
-    const value = id.slice(SESSION_ID.length);
+    const prefix = id.startsWith(SESSION_ID) ? SESSION_ID : id.startsWith('work:') ? 'work:' : null;
+    if (!prefix) return null;
+    const value = id.slice(prefix.length);
     return /^[A-Za-z0-9_-]{1,120}$/.test(value) ? value : null;
   }
 
   private async request<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
     const key = this.keys.read();
-    if (!key) throw new Error('OpenAI API key is missing. Switch to ChatGPT Work (API) and add your key.');
+    if (!key) throw new Error('OpenAI API key is missing. Select ChatGPT Codex and add your key.');
     return this.requestWithKey<T>(key, path, init);
   }
 
@@ -329,14 +331,14 @@ export class OpenAIAgentsSource implements Source {
     if (status === 'failed') return { state: 'error', live: false, activity: safeText(session.error || 'session failed', 300) };
     if (status === 'idle') {
       const recent = now - epoch(session.last_active_at, epoch(session.created_at)) < DONE_VISIBLE_MS;
-      return { state: recent && this.details.get(session.id)?.items.some((item) => item.kind === 'assistant') ? 'done' : 'idle', live: true, activity: 'waiting in ChatGPT Work' };
+      return { state: recent && this.details.get(session.id)?.items.some((item) => item.kind === 'assistant') ? 'done' : 'idle', live: true, activity: 'waiting in ChatGPT Codex' };
     }
-    return { state: 'offline', live: false, activity: status || 'saved in ChatGPT Work' };
+    return { state: 'offline', live: false, activity: status || 'saved in ChatGPT Codex' };
   }
 
   private publish(): void {
     const now = Date.now();
-    const room: RoomInfo = { id: ROOM_ID, name: 'ChatGPT Work · API', kind: 'chats', provider: 'work', canLaunch: true };
+    const room: RoomInfo = { id: ROOM_ID, name: 'Codex API tasks', kind: 'chats', provider: 'codex', canLaunch: true };
     const sessions: SessionSummary[] = [...this.sessions.values()].map((session) => {
       const id = `${SESSION_ID}${session.id}`;
       const model = session.agent?.model || 'OpenAI agent';
@@ -352,7 +354,7 @@ export class OpenAIAgentsSource implements Source {
       const feed: FeedItem[] = (cache?.items.slice(-9) ?? []).map((item) => ({ ts: item.ts, kind: item.kind, category: item.category, status: item.status, title: item.title, text: firstLine(item.body ?? item.title) }));
       const focusItem = cache?.items.slice().reverse().find((item) => item.kind === 'tool' && item.status === 'running') ?? latest;
       return {
-        id, provider: 'work' as const, room: ROOM_ID, title, project, model, family: familyOf(model), tier: tierOf(model),
+        id, provider: 'codex' as const, room: ROOM_ID, title, project, model, family: familyOf(model), tier: tierOf(model),
         mode: session.agent?.name || undefined, state: runtime.state, stateSince,
         activity: runtime.activity || (latest ? firstLine(latest.body ?? latest.title) : 'Open the session to view its history.'),
         live: runtime.live, lastEventAt: epoch(session.last_active_at, epoch(session.created_at)),

@@ -14,7 +14,7 @@ export type AgentState =
 
 export type ToolCategory = 'shell' | 'read' | 'write' | 'web' | 'task' | 'input' | 'other';
 /** Providers with a session source and an official desktop-app launch target. */
-export type AgentProvider = 'copilot' | 'codex' | 'work';
+export type AgentProvider = 'copilot' | 'codex';
 
 export interface RawEvent {
   type: string;

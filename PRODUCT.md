@@ -6,13 +6,13 @@ product
 
 ## Users
 
-One power user who runs several GitHub Copilot agents, local Codex tasks and OpenAI Agents API sessions in parallel, then glances at a second monitor between tasks. Wants to know in two seconds which agent needs them, which is stuck and which is burning budget, then open or control a session in the place that supports it.
+One power user who runs several GitHub Copilot agents, local Codex chats and hosted Codex API tasks in parallel, then glances at a second monitor between tasks. Wants to know in two seconds which agent needs them, which is stuck and which is burning budget, then open or control a session in the place that supports it.
 
 ## Product Purpose
 
-A local, multi-provider "mission control" for GitHub Copilot, local ChatGPT Codex threads and separately created OpenAI Agents API sessions, presented as a 3D office of toy robots. Success: a glance at the window answers "who is working, who is waiting for me, who failed"; a click gives the available activity history and provider-supported controls. Copilot control uses its official extension bridge. Local Codex remains read-only in ur-agents; Agents API sessions can be started, continued and cancelled from the app.
+A local, multi-provider "mission control" for GitHub Copilot and ChatGPT Codex sessions, presented as a 3D office of toy robots. Codex includes local App Server threads and separately billed hosted API tasks. Success: a glance at the window answers "who is working, who is waiting for me, who failed"; a click gives the available activity history and provider-supported controls. Copilot control uses its official extension bridge. Local Codex remains read-only in ur-agents; Codex API tasks can be started, continued and cancelled from the app.
 
-The user chooses one provider at a time. Session lists, rooms, counters, and details stay scoped to that choice. Codex exposes an All threads room and a complete List view for its local and Worktree threads. Agents API sessions are separate from existing ChatGPT desktop tasks, run in hosted environments, and use a locally encrypted API key. Selecting Copilot or Codex opens the matching desktop app. The provider registry can grow.
+The user chooses one provider at a time. Session lists, rooms, counters, and details stay scoped to that choice. Codex exposes local threads and hosted API tasks in its Chats view. The first Codex selection asks for an API key; hosted API sessions use a locally encrypted key and remain separate from local App Server threads. Selecting Copilot or Codex opens the matching desktop app. The provider registry can grow.
 
 ## Brand Personality
 

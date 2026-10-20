@@ -12,14 +12,7 @@ export const PROVIDERS: Record<AgentProvider, { label: string; buttonLabel: stri
   codex: {
     label: 'ChatGPT Codex',
     buttonLabel: 'ChatGPT Codex',
-    description: 'Monitor local Codex and Worktree tasks from ChatGPT.',
-    appUrl: 'codex://',
-    processName: 'ChatGPT.exe',
-  },
-  work: {
-    label: 'ChatGPT Work (API)',
-    buttonLabel: 'Work API',
-    description: 'Manage separate OpenAI Agents API sessions. API usage is billed to your Platform project.',
+    description: 'View local Codex chats and start or control Codex API tasks.',
     appUrl: 'codex://',
     processName: 'ChatGPT.exe',
   },

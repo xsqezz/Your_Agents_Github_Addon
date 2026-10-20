@@ -574,28 +574,28 @@ export class CodexSource implements Source {
 export class CombinedSource implements Source {
   private copilot: Source;
   private codex: Source;
-  private work?: Source;
+  private codexApi?: Source;
   private copilotSnapshot: Snapshot = { rooms: [], sessions: [] };
   private codexSnapshot: Snapshot = { rooms: [], sessions: [] };
-  private workSnapshot: Snapshot = { rooms: [], sessions: [] };
+  private codexApiSnapshot: Snapshot = { rooms: [], sessions: [] };
   private onUpdate: (snapshot: Snapshot) => void = () => {};
   private lastJson = '';
 
-  constructor(copilot: Source, codex: Source, work?: Source) {
+  constructor(copilot: Source, codex: Source, codexApi?: Source) {
     this.copilot = copilot;
     this.codex = codex;
-    this.work = work;
+    this.codexApi = codexApi;
   }
 
   info(): SourceInfo {
     const copilot = this.copilot.info();
     const codex = this.codex.info();
-    const work = this.work?.info();
+    const api = this.codexApi?.info();
     return {
       mode: copilot.mode,
       home: copilot.home,
-      providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)']), ...(work?.providers ?? [])],
-      providerKeys: [...new Set([...(copilot.providerKeys ?? ['copilot']), ...(codex.providerKeys ?? ['codex']), ...(work?.providerKeys ?? [])])],
+      providers: [...(copilot.providers ?? ['GitHub Copilot']), ...(codex.providers ?? ['ChatGPT (Codex App Server)']), ...(api?.providers ?? [])],
+      providerKeys: [...new Set([...(copilot.providerKeys ?? ['copilot']), ...(codex.providerKeys ?? ['codex']), ...(api?.providerKeys ?? [])])],
     };
   }
 
@@ -604,7 +604,7 @@ export class CombinedSource implements Source {
     await Promise.all([
       this.copilot.start((snapshot) => { this.copilotSnapshot = snapshot; this.publish(); }),
       this.codex.start((snapshot) => { this.codexSnapshot = snapshot; this.publish(); }),
-      ...(this.work ? [this.work.start((snapshot) => { this.workSnapshot = snapshot; this.publish(); })] : []),
+      ...(this.codexApi ? [this.codexApi.start((snapshot) => { this.codexApiSnapshot = snapshot; this.publish(); })] : []),
     ]);
     this.publish();
   }
@@ -612,18 +612,18 @@ export class CombinedSource implements Source {
   stop(): void {
     this.copilot.stop();
     this.codex.stop();
-    this.work?.stop();
+    this.codexApi?.stop();
   }
 
   async detail(id: string, since: number): Promise<SessionDetail | null> {
-    if (id.startsWith('work:')) return this.work?.detail(id, since) ?? null;
+    if (id.startsWith('codex-api:') || id.startsWith('work:')) return this.codexApi?.detail(id, since) ?? null;
     return id.startsWith(CODEX_ID) ? this.codex.detail(id, since) : this.copilot.detail(id, since);
   }
 
   private publish(): void {
     const snapshot: Snapshot = {
-      rooms: [...this.copilotSnapshot.rooms, ...this.codexSnapshot.rooms, ...this.workSnapshot.rooms],
-      sessions: [...this.copilotSnapshot.sessions, ...this.codexSnapshot.sessions, ...this.workSnapshot.sessions],
+      rooms: [...this.copilotSnapshot.rooms, ...this.codexSnapshot.rooms, ...this.codexApiSnapshot.rooms],
+      sessions: [...this.copilotSnapshot.sessions, ...this.codexSnapshot.sessions, ...this.codexApiSnapshot.sessions],
     };
     const json = JSON.stringify(snapshot);
     if (json === this.lastJson) return;

@@ -27,7 +27,7 @@
       <div id="counts" role="status" aria-label="Agent counts"></div>
       <div class="spacer"></div>
       <label id="control-option" class="toggle" title="Let ur-agents send messages, stop agents and answer or approve requests"><input type="checkbox" id="control-toggle" /><span>Control</span></label>
-      <button id="work-key-settings" type="button" class="btn small" hidden>API key</button>
+      <button id="codex-key-settings" type="button" class="btn small" hidden>API key</button>
       <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
       <button id="new-agent" type="button" class="btn" title="Start a new agent in this room (N)">New agent</button>
       <button id="overview" type="button" class="btn">Overview</button>
@@ -133,15 +133,15 @@
             <span>Permissions</span>
             <select id="launch-access"></select>
           </label>
-          <label class="field work-only" hidden>
+          <label class="field codex-api-only" hidden>
             <span>GitHub repository <i>(public)</i></span>
             <input id="launch-repository" type="url" placeholder="https://github.com/owner/repository" spellcheck="false" />
           </label>
-          <label class="field work-only" hidden>
+          <label class="field codex-api-only" hidden>
             <span>Session spending limit (USD)</span>
             <input id="launch-spend" type="number" min="0.01" max="100000" step="0.01" value="5.00" />
           </label>
-          <label class="field toggle-field work-only" hidden>
+          <label class="field toggle-field codex-api-only" hidden>
             <span>Network access</span>
             <span class="toggle"><input id="launch-network" type="checkbox" /><span>Allow unrestricted internet access</span></span>
           </label>
@@ -165,9 +165,9 @@
 
     <dialog id="api-key-dialog" aria-labelledby="api-key-title">
       <form id="api-key-form" class="provider-picker-content" autocomplete="off">
-        <p class="provider-picker-kicker">ChatGPT Work · Agents API</p>
-        <h2 id="api-key-title">Connect your OpenAI API key</h2>
-        <p id="api-key-description">Use a project API key with <code>api.agents.read</code>, <code>api.agents.write</code> and <code>api.responses.write</code>. Work tasks run as separate OpenAI-hosted API sessions; model and sandbox usage is billed to your Platform project, not your ChatGPT subscription.</p>
+        <p class="provider-picker-kicker">ChatGPT Codex · API tasks</p>
+        <h2 id="api-key-title">Connect Codex with an OpenAI API key</h2>
+        <p id="api-key-description">Use a project API key with <code>api.agents.read</code>, <code>api.agents.write</code> and <code>api.responses.write</code> to create and control hosted Codex tasks. API and sandbox usage is billed to your Platform project, separately from your ChatGPT subscription.</p>
         <label class="field">
           <span>OpenAI API key</span>
           <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />

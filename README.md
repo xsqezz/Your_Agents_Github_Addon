@@ -1,10 +1,10 @@
 # ur-agents
 
-A 3D hall for GitHub Copilot, local ChatGPT Codex threads and ChatGPT Work sessions created through OpenAI's Agents API. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with ten fixed desks. With more than ten sessions, working agents get desks first and the rest are listed in List view. Click an agent to read its activity history and use the controls available for that provider.
+A 3D hall for GitHub Copilot and ChatGPT Codex. Codex combines local Codex threads with hosted tasks created through OpenAI's Agents API. A closed modernist room (plaster walls, a window band onto the city, an oak slat wall) with ten fixed desks. With more than ten sessions, working agents get desks first and the rest are listed in List view. Click an agent to read its activity history and use the controls available for that session.
 
-Copilot sessions are watched from the Copilot app and CLI data under `~/.copilot`. Once you install the bridge and switch **Control** on, ur-agents can send messages, stop work, answer questions and decide permission requests. Local Codex threads are listed through the official Codex App Server bundled with ChatGPT. The separate **ChatGPT Work (API)** provider lists Agents API sessions, including their saved turns, and can create tasks, send messages and cancel turns. See [local Codex sessions](#chatgpt-codex-sessions), [ChatGPT Work API sessions](#chatgpt-work-api-sessions), [Controlling Copilot agents](#controlling-copilot-agents) and [docs/PLAN.md](docs/PLAN.md).
+Copilot sessions are watched from the Copilot app and CLI data under `~/.copilot`. Once you install the bridge and switch **Control** on, ur-agents can send messages, stop work, answer questions and decide permission requests. Local Codex threads are listed through the official Codex App Server bundled with ChatGPT. The **ChatGPT Codex** provider also lists hosted Agents API sessions, including their saved turns, and can create tasks, send messages and cancel turns. See [ChatGPT Codex sessions](#chatgpt-codex-sessions), [Codex API tasks](#codex-api-tasks), [Controlling Copilot agents](#controlling-copilot-agents) and [docs/PLAN.md](docs/PLAN.md).
 
-On a normal launch, choose **GitHub Copilot**, **ChatGPT Codex** or **ChatGPT Work (API)** in the startup window. The last choice is highlighted and saved. Selecting a provider opens or activates its desktop app; the top-bar switcher stays visible afterward. Rooms, counters, desks and session details show only that provider. The Work API source asks for a key on first use.
+On a normal launch, choose **GitHub Copilot** or **ChatGPT Codex** in the startup window. The last choice is highlighted and saved. Selecting a provider opens or activates its desktop app; the top-bar switcher stays visible afterward. Rooms, counters, desks and session details show only that provider. The first time you select ChatGPT Codex, ur-agents asks for an OpenAI API key so it can also create and control hosted Codex tasks. Local Codex chats remain available without that key.
 
 ## Install
 
@@ -21,7 +21,7 @@ The Setup (Squirrel) needs no admin rights: it installs to `%LOCALAPPDATA%\ur_ag
 ```powershell
 npm install
 node node_modules/electron/install.js   # npm 12 blocks Electron's postinstall
-npm start                               # GitHub Copilot + local Codex + ChatGPT Work API sessions
+npm start                               # GitHub Copilot + local Codex + Codex API tasks
 npm run demo                            # 14 synthetic agents cycling through every state
 ```
 
@@ -89,11 +89,11 @@ Selecting **ChatGPT Codex** opens or activates the ChatGPT desktop app through i
 
 This integration is read-only inside ur-agents. Use **Open in ChatGPT** to send a message, stop work or handle an approval. The App Server reports runtime status only for threads loaded in that server process, so an active thread already running in the desktop app may appear as saved/offline here while its history continues to update. Ordinary ChatGPT chats and remote/cloud tasks are not included; this source is for local Codex threads exposed by the App Server.
 
-## ChatGPT Work API sessions
+## Codex API tasks
 
-**ChatGPT Work (API)** is a separate integration with the OpenAI Agents API. It does not read existing Codex Local/Worktree chats or regular ChatGPT Work tasks from the desktop app. It lists sessions in the API project for the configured key, and ur-agents can start a new API session, load its saved history, send follow-up messages and cancel its active turn. Tasks run in OpenAI-hosted cloud environments, separate from folders on this computer.
+Codex in ur-agents combines local Codex Local/Worktree chats from the desktop app and hosted Codex API tasks from the OpenAI Agents API. These are separate session types: local chats are read-only in ur-agents and open in ChatGPT, while API tasks run in OpenAI-hosted cloud environments and can be created, messaged and cancelled in ur-agents.
 
-On the first switch to **ChatGPT Work (API)**, paste an OpenAI Platform project API key. It needs `api.agents.read`, `api.agents.write` and `api.responses.write`. ur-agents validates the key, stores it encrypted with Electron's OS-backed secure storage and keeps it out of renderer storage and logs. Use **API key** in the top bar to change or remove it later. Create keys at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+The first time you select **ChatGPT Codex**, paste an OpenAI Platform project API key. It needs `api.agents.read`, `api.agents.write` and `api.responses.write`. ur-agents validates the key, stores it encrypted with Electron's OS-backed secure storage and keeps it out of renderer storage and logs. Use **API key** in the top bar to change or remove it later. Create keys at [platform.openai.com/api-keys](https://platform.openai.com/api-keys).
 
 Model and hosted-environment usage is billed to the OpenAI Platform project; a ChatGPT subscription does not cover these API charges. Each new session defaults to a $5 API session spending limit, which you can change before starting. You can optionally enter a **public** GitHub repository URL; ur-agents clones it into the remote workspace with network access restricted to GitHub domains. Without a repository, network access is disabled unless you enable it. Private repositories and synchronization with a local folder are not supported by this provider.
 

@@ -11,7 +11,7 @@ import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
 import { CodexSource, CombinedSource } from './codex.ts';
 import { AgentsApiKeyStore } from './agents-api-key.ts';
-import { OpenAIAgentsSource, type CreateWorkSessionRequest } from './agents-api.ts';
+import { OpenAIAgentsSource, type CreateCodexApiSessionRequest } from './agents-api.ts';
 import { CliLauncher, DemoLauncher, type Launcher } from './launcher.ts';
 import { launchProviderApp } from './provider-launch.ts';
 import type { Source } from './source.ts';
@@ -167,7 +167,7 @@ let win: BrowserWindow | null = null;
 let source: Source;
 let control: Controller;
 let launcher: Launcher;
-let workSource: OpenAIAgentsSource | null = null;
+let codexApiSource: OpenAIAgentsSource | null = null;
 let agentsApiKeys: AgentsApiKeyStore | null = null;
 let latest: Snapshot = { rooms: [], sessions: [] };
 let primed = false;
@@ -180,7 +180,7 @@ function notifyAttention(list: SessionSummary[]): void {
     if (!primed || prev === s.state || !ATTENTION.includes(s.state) || !s.live) continue;
     if (win?.isFocused() || !Notification.isSupported()) continue;
     const body = s.state === 'awaiting-permission' ? `Needs permission — ${s.activity}` : s.state === 'awaiting-input' ? `Asks: ${s.activity}` : `Error: ${s.activity}`;
-    const source = s.provider === 'codex' ? 'Codex' : s.provider === 'work' ? 'ChatGPT Work' : s.provider === 'copilot' ? 'Copilot' : 'Agent';
+    const source = s.provider === 'codex' ? 'ChatGPT Codex' : s.provider === 'copilot' ? 'Copilot' : 'Agent';
     const n = new Notification({ title: `${source} · ${s.title}`, body: body.slice(0, 200) });
     n.on('click', () => {
       win?.show();
@@ -305,8 +305,8 @@ app.whenReady().then(async () => {
   } else {
     const live = new LiveSource(home);
     agentsApiKeys = new AgentsApiKeyStore(app.getPath('userData'));
-    workSource = new OpenAIAgentsSource(agentsApiKeys);
-    source = new CombinedSource(live, new CodexSource(), workSource);
+    codexApiSource = new OpenAIAgentsSource(agentsApiKeys);
+    source = new CombinedSource(live, new CodexSource(), codexApiSource);
     control = new ControlServer({ copilotHome: home, bridgeSource: path.join(__dirname, 'bridge'), onChange: pushControl });
     launcher = new CliLauncher(live, () => control.state().enabled);
   }
@@ -321,22 +321,22 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
   ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
   ipcMain.handle('ua:sign-in', () => launcher.signIn());
-  ipcMain.handle('ua:work-key-status', () => !!agentsApiKeys?.read());
-  ipcMain.handle('ua:work-set-api-key', (_e, key: unknown) => {
-    if (!workSource || typeof key !== 'string') return { ok: false, error: 'ChatGPT Work API is unavailable.' };
-    return workSource.validateKey(key);
+  ipcMain.handle('ua:codex-api-key-status', () => !!agentsApiKeys?.read());
+  ipcMain.handle('ua:codex-api-set-key', (_e, key: unknown) => {
+    if (!codexApiSource || typeof key !== 'string') return { ok: false, error: 'Codex API tasks are unavailable.' };
+    return codexApiSource.validateKey(key);
   });
-  ipcMain.handle('ua:work-remove-api-key', () => {
-    if (!agentsApiKeys) return { ok: false, error: 'ChatGPT Work API is unavailable.' };
-    try { workSource?.removeKey(); return { ok: true }; }
+  ipcMain.handle('ua:codex-api-remove-key', () => {
+    if (!agentsApiKeys) return { ok: false, error: 'Codex API tasks are unavailable.' };
+    try { codexApiSource?.removeKey(); return { ok: true }; }
     catch (e) { return { ok: false, error: (e as Error).message }; }
   });
-  ipcMain.handle('ua:work-create-session', (_e, request: unknown) => {
-    if (!workSource || !request || typeof request !== 'object') return { ok: false, error: 'ChatGPT Work API is unavailable.' };
-    return workSource.createSession(request as CreateWorkSessionRequest);
+  ipcMain.handle('ua:codex-api-create-session', (_e, request: unknown) => {
+    if (!codexApiSource || !request || typeof request !== 'object') return { ok: false, error: 'Codex API tasks are unavailable.' };
+    return codexApiSource.createSession(request as CreateCodexApiSessionRequest);
   });
-  ipcMain.handle('ua:work-send', (_e, id: unknown, message: unknown) => workSource?.send(String(id), String(message)) ?? { ok: false, error: 'ChatGPT Work API is unavailable.' });
-  ipcMain.handle('ua:work-cancel', (_e, id: unknown) => workSource?.cancel(String(id)) ?? { ok: false, error: 'ChatGPT Work API is unavailable.' });
+  ipcMain.handle('ua:codex-api-send', (_e, id: unknown, message: unknown) => codexApiSource?.send(String(id), String(message)) ?? { ok: false, error: 'Codex API sessions are unavailable.' });
+  ipcMain.handle('ua:codex-api-cancel', (_e, id: unknown) => codexApiSource?.cancel(String(id)) ?? { ok: false, error: 'Codex API sessions are unavailable.' });
   ipcMain.handle('ua:open-api-keys', async () => {
     try { await shell.openExternal('https://platform.openai.com/api-keys'); return { ok: true }; }
     catch (e) { return { ok: false, error: `Could not open OpenAI Platform: ${(e as Error).message}` }; }
@@ -351,7 +351,7 @@ app.whenReady().then(async () => {
     }
   });
   ipcMain.handle('ua:open-provider-app', async (_e, provider: unknown) => {
-    if (provider !== 'copilot' && provider !== 'codex' && provider !== 'work') return { ok: false, error: 'Unsupported provider.' };
+    if (provider !== 'copilot' && provider !== 'codex') return { ok: false, error: 'Unsupported provider.' };
     try {
       await launchProviderApp(provider, (url) => shell.openExternal(url), win);
       return { ok: true };
