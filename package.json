@@ -1,6 +1,6 @@
 {
   "name": "ur-agents",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "3D office for GitHub Copilot and ChatGPT Codex agent sessions.",
   "private": true,
   "type": "module",
