@@ -192,22 +192,6 @@ function renderTopbar(): void {
   newAgent.title = currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the ChatGPT app to add it here';
 }
 
-function renderStatus(): void {
-  const bar = $('statusbar');
-  const vis = visible();
-  const seated = Math.min(vis.length, MIN_DESKS);
-  const working = vis.filter((s) => s.state === 'tool' || s.state === 'thinking' || s.state === 'compacting').length;
-  const unseated = Math.max(0, vis.length - MIN_DESKS);
-  const text = store.mode === 'demo' ? 'Demo — synthetic agents, nothing is read from disk' : `Read-only · ${providerLabel()}`;
-  bar.replaceChildren(
-    h('span', { class: 'live-dot' }),
-    h('span', { text }),
-    h('span', { class: 'spacer' }),
-    ...(unseated ? [h('span', { text: `${unseated} more without a desk — see List view` })] : []),
-    h('span', { text: `${currentRoom()?.name ?? 'Room'} · ${seated} of ${MIN_DESKS} desks taken · ${working} working` }),
-  );
-}
-
 /* ───────────── rooms ───────────── */
 
 const roomStats = (id: string): { needs: number; working: number; total: number } => {
@@ -230,7 +214,6 @@ function renderRooms(): void {
   const showChats = codexSidebar && sidebarView === 'chats';
   box.hidden = !multi;
   box.setAttribute('aria-label', showChats ? 'Codex chats' : 'Rooms');
-  document.body.classList.toggle('codex-sidebar', codexSidebar);
   document.body.classList.toggle('has-rooms', multi);
   if (!multi) return;
   const sig = [sidebarView, store.activeProvider, store.showOffline, store.selectedId ?? '', ...rooms
@@ -564,7 +547,6 @@ function select(id: string | null): void {
 function render(): void {
   pickRoom();
   renderTopbar();
-  renderStatus();
   renderRooms();
   const vis = visible();
   scene.setInsets(roomsPx());

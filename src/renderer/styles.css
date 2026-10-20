@@ -90,7 +90,7 @@ body.maximized .wbtn .ico-restore { display: block; }
 
 /* ───────── empty state ───────── */
 #empty {
-  position: fixed; z-index: 3; left: 50%; bottom: 52px; transform: translateX(-50%); text-align: center; max-width: 460px;
+  position: fixed; z-index: 3; left: 50%; bottom: 12px; transform: translateX(-50%); text-align: center; max-width: 460px;
   padding: 10px 18px; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
@@ -98,7 +98,7 @@ body.maximized .wbtn .ico-restore { display: block; }
 #empty p { margin: 0; color: var(--muted); font-size: 13px; }
 
 /* ───────── list view ───────── */
-#list-view { position: fixed; inset: 68px 12px 40px 12px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+#list-view { position: fixed; inset: 68px 12px 12px 12px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
 body.has-panel #list-view { right: calc(var(--panel-w) + 24px); }
 table.list { width: 100%; min-width: 1220px; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
 .list th:nth-child(1), .list td:nth-child(1) { width: 110px; }
@@ -205,18 +205,10 @@ table.list { width: 100%; min-width: 1220px; table-layout: fixed; border-collaps
 .note h3 { margin: 0 0 4px; font-size: 13px; }
 .note p { margin: 0; color: var(--muted); font-size: 12.5px; }
 
-/* ───────── status bar ───────── */
-#statusbar {
-  position: fixed; left: 12px; right: 12px; bottom: 10px; z-index: 4; height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 12px; color: var(--muted);
-  background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); border-radius: 16px;
-}
-body.has-panel #statusbar { right: calc(var(--panel-w) + 24px); }
-
 /* ───────── rooms ───────── */
 :root { --rooms-w: clamp(240px, 21vw, 330px); }
-body.codex-sidebar { --rooms-w: clamp(300px, 26vw, 420px); }
 #rooms {
-  position: fixed; z-index: 5; top: 12px; left: 12px; bottom: 52px; width: var(--rooms-w);
+  position: fixed; z-index: 5; top: 12px; left: 12px; bottom: 12px; width: var(--rooms-w);
   display: flex; flex-direction: column; background: color-mix(in srgb, var(--surface) 94%, transparent);
   border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); overflow: hidden;
 }
@@ -266,7 +258,6 @@ body.has-rooms #topbar { left: calc(var(--rooms-w) + 24px); }
 .cr-stale { color: #ffc247; }
 .cr-empty .btn { justify-self: start; }
 body.has-rooms #list-view { left: calc(var(--rooms-w) + 24px); }
-body.has-rooms #statusbar { left: calc(var(--rooms-w) + 24px); }
 
 /* ───────── new agent dialog ───────── */
 #provider-picker { position: fixed; z-index: 50; inset: 0; margin: auto; width: min(520px, calc(100% - 32px)); padding: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 26px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); }
