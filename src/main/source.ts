@@ -1,10 +1,8 @@
-import type { AgentProvider, SessionDetail, Snapshot } from '../core/types.ts';
+import type { SessionDetail, Snapshot } from '../core/types.ts';
 
 export interface SourceInfo {
   mode: 'live' | 'demo';
   home: string;
-  providers?: string[];
-  providerKeys?: AgentProvider[];
 }
 
 export interface Source {

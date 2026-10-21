@@ -19,15 +19,9 @@
 
     <header id="topbar">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>ur-agents</span></div>
-      <div class="provider-choice">
-        <span class="provider-caption">Provider</span>
-        <div id="provider-switch" class="seg provider-switch" role="group" aria-label="Agent provider">
-        </div>
-      </div>
       <div id="counts" role="status" aria-label="Agent counts"></div>
       <div class="spacer"></div>
       <label id="control-option" class="toggle" title="Let ur-agents send messages, stop agents and answer or approve requests"><input type="checkbox" id="control-toggle" /><span>Control</span></label>
-      <button id="codex-key-settings" type="button" class="btn small" hidden>API key</button>
       <label class="toggle"><input type="checkbox" id="show-offline" /><span>Show offline</span></label>
       <button id="new-agent" type="button" class="btn" title="Start a new agent in this room (N)">New agent</button>
       <button id="overview" type="button" class="btn">Overview</button>
@@ -81,25 +75,11 @@
 
     <aside id="rooms" hidden aria-label="Rooms">
       <div class="rooms-head"><span id="rooms-heading">Rooms</span><span id="rooms-count"></span></div>
-      <div id="sidebar-tabs" class="sidebar-tabs" role="group" aria-label="Chat sidebar view" hidden>
-        <button type="button" data-sidebar-view="chats" aria-pressed="true">Chats</button>
-        <button type="button" data-sidebar-view="rooms" aria-pressed="false">Rooms</button>
-      </div>
       <ul id="room-list"></ul>
-      <ul id="chat-list" hidden aria-label="Chats"></ul>
       <section id="credits" aria-label="Monthly AI credits"></section>
     </aside>
 
     <div id="toast" role="status" hidden></div>
-
-    <dialog id="provider-picker" aria-labelledby="provider-picker-title" aria-describedby="provider-picker-description">
-      <div class="provider-picker-content">
-        <p class="provider-picker-kicker">ur-agents</p>
-        <h2 id="provider-picker-title">Choose an agent app</h2>
-        <p id="provider-picker-description">Select which sessions and rooms to show. Your choice is saved for next time.</p>
-        <div id="provider-picker-options" class="provider-picker-options"></div>
-      </div>
-    </dialog>
 
     <dialog id="launch" aria-labelledby="launch-title">
       <form id="launch-form" autocomplete="off">
@@ -121,29 +101,17 @@
             <input id="launch-model" type="text" list="launch-models" placeholder="Default" spellcheck="false" />
             <datalist id="launch-models"></datalist>
           </label>
-          <label class="field copilot-only">
+          <label class="field">
             <span>Reasoning effort</span>
             <select id="launch-effort"></select>
           </label>
-          <label class="field copilot-only">
+          <label class="field">
             <span>Mode</span>
             <select id="launch-mode"></select>
           </label>
-          <label class="field copilot-only">
+          <label class="field">
             <span>Permissions</span>
             <select id="launch-access"></select>
-          </label>
-          <label class="field codex-api-only" hidden>
-            <span>GitHub repository <i>(public)</i></span>
-            <input id="launch-repository" type="url" placeholder="https://github.com/owner/repository" spellcheck="false" />
-          </label>
-          <label class="field codex-api-only" hidden>
-            <span>Session spending limit (USD)</span>
-            <input id="launch-spend" type="number" min="0.01" max="100000" step="0.01" value="5.00" />
-          </label>
-          <label class="field toggle-field codex-api-only" hidden>
-            <span>Network access</span>
-            <span class="toggle"><input id="launch-network" type="checkbox" /><span>Allow unrestricted internet access</span></span>
           </label>
         </div>
         <label class="field">
@@ -162,27 +130,6 @@
       </form>
     </dialog>
     <div id="scrim" hidden></div>
-
-    <dialog id="api-key-dialog" aria-labelledby="api-key-title">
-      <form id="api-key-form" class="provider-picker-content" autocomplete="off">
-        <p class="provider-picker-kicker">ChatGPT Codex · API tasks</p>
-        <h2 id="api-key-title">Connect Codex with an OpenAI API key</h2>
-        <p id="api-key-description">Use a project API key with <code>api.agents.read</code>, <code>api.agents.write</code> and <code>api.responses.write</code> to create and control hosted Codex tasks. API and sandbox usage is billed to your Platform project, separately from your ChatGPT subscription.</p>
-        <label class="field">
-          <span>OpenAI API key</span>
-          <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" />
-        </label>
-        <p id="api-key-error" class="error" role="alert" hidden></p>
-        <div class="api-key-links">
-          <button id="open-api-keys" type="button" class="link-btn">Create or manage a key on platform.openai.com</button>
-          <button id="remove-api-key" type="button" class="link-btn danger-text" hidden>Remove saved key</button>
-        </div>
-        <footer>
-          <button id="api-key-cancel" type="button" class="btn">Cancel</button>
-          <button id="api-key-save" type="submit" class="btn primary">Check and save key</button>
-        </footer>
-      </form>
-    </dialog>
 
     <i class="grip" data-edge="n"></i><i class="grip" data-edge="s"></i><i class="grip" data-edge="e"></i><i class="grip" data-edge="w"></i>
     <i class="grip" data-edge="ne"></i><i class="grip" data-edge="nw"></i><i class="grip" data-edge="se"></i><i class="grip" data-edge="sw"></i>

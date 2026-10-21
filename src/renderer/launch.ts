@@ -36,23 +36,18 @@ function showError(text: string, needsLogin = false): void {
 function refresh(): void {
   const room = getRoom();
   const state = controlState();
-  const codexApi = room?.id === 'codex:api';
   const dlg = $<HTMLDialogElement>('launch');
   $('launch-room').textContent = room?.name ?? '';
-  $('launch-title').textContent = codexApi ? 'New Codex API task' : 'New agent';
-  $('launch-hint').textContent = codexApi
-    ? 'Runs in an OpenAI-hosted Codex workspace, separate from local Codex chats. API and sandbox usage are billed to your Platform project. Only public GitHub repositories can be cloned here; network access is disabled unless you enable it below.'
-    : 'It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.';
-  $('launch-model').setAttribute('placeholder', codexApi ? 'gpt-6-astra' : 'Default');
-  $('launch-name').setAttribute('placeholder', codexApi ? 'Shown in ur-agents' : 'Shown in the Copilot app');
-  for (const el of dlg.querySelectorAll<HTMLElement>('.copilot-only')) el.hidden = codexApi;
-  for (const el of dlg.querySelectorAll<HTMLElement>('.codex-api-only')) el.hidden = !codexApi;
+  $('launch-title').textContent = 'New GitHub Copilot agent';
+  $('launch-hint').textContent = 'It runs on its own until the task is done. Open it in the GitHub Copilot app to continue the conversation.';
+  $('launch-model').setAttribute('placeholder', 'Default');
+  $('launch-name').setAttribute('placeholder', 'Shown in the Copilot app');
   const notice = $('launch-notice');
   let text = '';
   let action = false;
   if (!room?.canLaunch) text = 'This room has no folder of its own, so an agent cannot start here. Pick a project room.';
-  else if (!codexApi && !state) text = 'Connecting to the control service…';
-  else if (!codexApi && state && !state.enabled) {
+  else if (!state) text = 'Connecting to the control service…';
+  else if (state && !state.enabled) {
     text = 'Starting agents needs Control. Turn it on to continue.';
     action = true;
   }
@@ -110,23 +105,12 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
     e.preventDefault();
     const room = getRoom();
     if (!room || busy) return;
-    const codexApi = room.id === 'codex:api';
-    if (!codexApi && $<HTMLSelectElement>('launch-access').value === 'full' && !confirm('Full access lets this agent read and write anywhere on your computer and open any URL, with no prompts.\n\nStart it anyway?')) return;
+    if ($<HTMLSelectElement>('launch-access').value === 'full' && !confirm('Full access lets this agent read and write anywhere on your computer and open any URL, with no prompts.\n\nStart it anyway?')) return;
     busy = true;
     refresh();
     showError('');
     try {
-      const r = codexApi
-        ? await window.ua.codexApiCreateSession({
-          title: $<HTMLInputElement>('launch-name').value,
-          prompt: $<HTMLTextAreaElement>('launch-prompt').value,
-          model: $<HTMLInputElement>('launch-model').value,
-          effort: $<HTMLSelectElement>('launch-effort').value as LaunchEffort | '',
-          maxSpendUsd: Number($<HTMLInputElement>('launch-spend').value),
-          repositoryUrl: $<HTMLInputElement>('launch-repository').value,
-          allowNetwork: $<HTMLInputElement>('launch-network').checked,
-        })
-        : await window.ua.launch({
+      const r = await window.ua.launch({
           room: room.id,
           prompt: $<HTMLTextAreaElement>('launch-prompt').value,
           model: $<HTMLInputElement>('launch-model').value,
@@ -139,7 +123,7 @@ export function initLauncher(roomOf: () => RoomInfo | undefined): void {
         $<HTMLTextAreaElement>('launch-prompt').value = '';
         $<HTMLInputElement>('launch-name').value = '';
         dlg.close();
-        toast(('id' in r && r.id) ? 'Codex API task started in the hosted workspace.' : ('note' in r ? r.note : undefined) ?? `Agent started in ${room.name}. It takes a desk in a moment.`);
+        toast(('note' in r ? r.note : undefined) ?? `Agent started in ${room.name}. It takes a desk in a moment.`);
       } else {
         showError(r.error ?? 'Could not start the agent.', 'needsLogin' in r && r.needsLogin === true);
       }

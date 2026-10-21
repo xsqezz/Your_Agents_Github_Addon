@@ -129,7 +129,7 @@ export class LiveSource implements Source, LaunchTarget {
   }
 
   info(): SourceInfo {
-    return { mode: 'live', home: this.home, providers: ['GitHub Copilot'], providerKeys: ['copilot'] };
+    return { mode: 'live', home: this.home };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {

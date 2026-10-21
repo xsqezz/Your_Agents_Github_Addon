@@ -13,8 +13,8 @@ export type AgentState =
   | 'stalled';
 
 export type ToolCategory = 'shell' | 'read' | 'write' | 'web' | 'task' | 'input' | 'other';
-/** Providers with a session source and an official desktop-app launch target. */
-export type AgentProvider = 'copilot' | 'codex';
+/** The only supported session source and official desktop-app target. */
+export type AgentProvider = 'copilot';
 
 export interface RawEvent {
   type: string;
@@ -109,9 +109,6 @@ export interface SessionSummary {
   contextTokens?: number;
   contextLimit?: number;
   costAiu?: number;
-  /** OpenAI Agents API best-effort consumed USD, if the session reports it. */
-  costUsd?: number;
-  costUsdLimit?: number;
   premiumRequests?: number;
   toolCalls: number;
   turns: number;

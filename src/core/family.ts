@@ -23,7 +23,7 @@ export function tierOf(model: string | undefined | null): number {
 
 export const FAMILY_LABEL: Record<Family, string> = {
   claude: 'Claude',
-  gpt: 'GPT / Codex',
+  gpt: 'GPT',
   gemini: 'Gemini',
   grok: 'Grok',
   mai: 'MAI',

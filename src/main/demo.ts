@@ -104,7 +104,7 @@ export class DemoSource implements Source {
   }
 
   info(): SourceInfo {
-    return { mode: 'demo', home: 'synthetic demo data', providers: ['Demo'], providerKeys: [] };
+    return { mode: 'demo', home: 'synthetic demo data' };
   }
 
   async start(onUpdate: (snapshot: Snapshot) => void): Promise<void> {

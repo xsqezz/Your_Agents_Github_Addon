@@ -1,11 +1,11 @@
 # ur-agents — plan (v3)
 
-**Cel:** osobna aplikacja **.exe** — „biuro agentów" w **3D**. Każdy agent z GitHub Copilot app to **urocza figurka-robocik 3D (styl zabawki z vinylu/plastiku, jak na Twoich referencjach) przy biurku**, w swoim prostokącie (strefie na podłodze). Wygląd zależy od rodziny modelu: **Claude = pomarańczowy klockowaty stworek, Codex/GPT = ciemny robocik z ekranem-twarzą i świecącymi oczami, reszta (Gemini, Grok…) = kolejne figurki w tym samym stylu**, każda z własną sylwetką i kolorem. Po animacji widzisz, co robi; po kliknięciu dostajesz **panel z pełnymi informacjami** i podglądem na żywo — i możesz agentem **sterować** (wysłać wiadomość, zatrzymać, zatwierdzić uprawnienie, odpowiedzieć na pytanie).
+**Cel:** osobna aplikacja **.exe** — „biuro agentów" w **3D**. Każdy agent z GitHub Copilot app to **urocza figurka-robocik 3D (styl zabawki z vinylu/plastiku, jak na Twoich referencjach) przy biurku**, w swoim prostokącie (strefie na podłodze). Wygląd zależy od rodziny modelu: **Claude = pomarańczowy klockowaty stworek, GPT = ciemny robocik z ekranem-twarzą i świecącymi oczami, reszta (Gemini, Grok…) = kolejne figurki w tym samym stylu**, każda z własną sylwetką i kolorem. Po animacji widzisz, co robi; po kliknięciu dostajesz **panel z pełnymi informacjami** i podglądem na żywo — i możesz agentem **sterować** (wysłać wiadomość, zatrzymać, zatwierdzić uprawnienie, odpowiedzieć na pytanie).
 
 Stan: v3 · 2026-10-18 · zbadane na: app 1.1.30, CLI 1.0.99-2, Windows.
 Zmiany vs v2: **grafika 3D** (zamiast pixel-artu) i **sterowanie w zakresie** (przez oficjalne rozszerzenie-most). v3.1: **styl postaci wg Twoich referencji** (chunky figurki-robociki zamiast humanoidów).
 
-Aktualizacja 2026-10-19: aplikacja obsługuje także lokalne wątki Codex z ChatGPT przez oficjalny Codex App Server. Szczegóły: tabela S9 i dopisek w sekcji architektury. Sterowanie Codexem pozostaje w aplikacji ChatGPT.
+Aktualizacja 2026-10-21: ur-agents obsługuje wyłącznie sesje GitHub Copilot.
 
 ---
 
@@ -21,7 +21,6 @@ Aktualizacja 2026-10-19: aplikacja obsługuje także lokalne wątki Codex z Chat
 | **S4** | `session-state/<sid>/session.db` | `todos`, `workflow_*` | plan / postęp agenta |
 | **S5** | `inuse.<pid>.lock` + procesy | żywotność | 4 procesy CLI żyją, `is_running`=1 ma jedna sesja → *proces żyje ≠ agent pracuje* |
 | **S8** | **most (rozszerzenie CLI)** — sekcja 5 | zdarzenia sesji na żywo (`session.on`) **+ sterowanie** | oficjalne SDK (`joinSession`); do sprawdzenia, czy `session.on` daje delty tokenów |
-| **S9** | **Codex App Server** — lokalny proces `codex app-server --listen stdio://` | lista lokalnych wątków, ich statusy i historia tur | oficjalne JSON-RPC; wątki Local i Worktree; tylko odczyt w ur-agents, bez czytania prywatnych baz Codexa |
 | S6 | OpenTelemetry CLI | spany modelu i narzędzi | opcjonalne, env przed startem apki |
 | ✗ | prywatny WS apki (`run/ws.port`+token) | — | **odrzucone** na rzecz S8 (oficjalne, wersjonowane SDK) |
 | ✗ | proxy MITM HTTPS | surowy ruch | odrzucone: własny certyfikat + wgląd w token Copilota |
@@ -38,9 +37,9 @@ Aktualizacja 2026-10-19: aplikacja obsługuje także lokalne wątki Codex z Chat
 2. Forma: **samodzielna aplikacja desktop `.exe`**.
 3. Stack: **Electron + TypeScript** (na maszynie jest Node, **nie ma Rusta** → Tauri odpada bez instalacji toolchainu; demon działa w procesie głównym). Do sprawdzenia w Fazie 0: Node w Electronie wspiera `node:sqlite` (≥22.5), inaczej `better-sqlite3`.
 4. Grafika: **3D — Three.js** (react-three-fiber). Postacie to proste, zaokrąglone bryły, więc prototyp powstaje **proceduralnie w kodzie**, docelowo modele **glTF**; panele w React/HTML.
-5. Zakres: lokalne sesje Copilota oraz lokalne wątki Codex (Local i Worktree). Codex jest odczytywany przez App Server; zwykłe rozmowy ChatGPT i wątki Cloud pozostają poza zakresem.
+5. Zakres: lokalne sesje GitHub Copilot.
 6. Historia we własnej bazie (`%LOCALAPPDATA%\ur-agents\`), retencja 30 dni, wyłączalna.
-7. Styl wg Twoich referencji (pomarańczowy klockowaty stworek; ciemny robocik z ekranem-twarzą, cyjanowymi oczami i słuchawkami). Postacie to **własne projekty** „w klimacie" rodziny, **bez logotypów** firm i bez kopiowania 1:1 cudzych maskotek (znaki towarowe, gdyby repo było publiczne). Założenie: ref. #1 = Claude, ref. #2 = Codex/GPT.
+7. Styl wg Twoich referencji (pomarańczowy klockowaty stworek; ciemny robocik z ekranem-twarzą, cyjanowymi oczami i słuchawkami). Postacie to **własne projekty** „w klimacie" rodziny, **bez logotypów** firm i bez kopiowania 1:1 cudzych maskotek (znaki towarowe, gdyby repo było publiczne). Założenie: ref. #1 = Claude, ref. #2 = GPT.
 8. Żadnych prawdziwych danych sesji w repo.
 
 ---
@@ -54,18 +53,12 @@ flowchart LR
     BR["ur-agents-bridge<br/>rozszerzenie, joinSession"]
     CLI <-- JSON-RPC --> BR
   end
-  subgraph CODEX["ChatGPT desktop · Codex"]
-    THREADS["Lokalne wątki Local / Worktree"]
-    CAS["oficjalny Codex App Server<br/>JSON-RPC po stdio"]
-    THREADS <-- odczyt przez API --> CAS
-  end
   CLI -- append --> EV[("events.jsonl")]
   CLI -- zapis --> SS[("session-store.db")]
   APP -- zapis --> DD[("data.db")]
   subgraph EXE["ur-agents.exe (Electron)"]
     subgraph MAIN["proces glowny"]
       T["Tailer + readers - read-only"] --> N["Normalizer"] --> R["Reducer stanow"] --> ST[("store.db")]
-      C["Klient Codex App Server - read-only"] --> N
       CTL["Kontroler komend + audyt"]
     end
     R -- IPC --> UI["Renderer: biuro 3D + panele"]
@@ -76,12 +69,8 @@ flowchart LR
   SS --> T
   DD --> T
   BR <-- loopback WS + token --> CTL
-  CAS <-- JSON-RPC --> C
 ```
-
-Codex App Server jest uruchamiany lokalnie przez ur-agents z CLI dołączonego do aplikacji ChatGPT (lub z `PATH`). Osobny proces może pokazać zapisane wątki i historię, ale nie widzi aktywnego stanu sesji, którą aplikacja ChatGPT już załadowała we własnym procesie. Dlatego status takiego wątku może tu wyglądać na zapisany/nieaktywny; oryginalny wątek można otworzyć przyciskiem **Open in ChatGPT**.
-
-Przy zwykłym starcie użytkownik wybiera Copilot albo ChatGPT Codex w widocznym oknie startowym. Ostatni wybór jest zapamiętany i podświetlony; po wyborze pokoje, liczniki, sesje i panel pokazują wyłącznie wskazane źródło. Wybór uruchamia lub aktywuje aplikację przez zarejestrowany protokół: `ghapp://chats` dla poprawnego widoku GitHub Copilot oraz `codex://` dla aplikacji ChatGPT. Pojedyncze wątki nadal otwierają dokładne trasy. Widok Codexa ma pokój **All Codex threads**, pełną paginację App Servera oraz indeksowanie naprawiające niepełne metadane, w tym zadania Worktree bez podglądu; pełne długie tytuły pozostają czytelne. Nowe źródło można dodać w rejestrze i warstwie dostawcy; Claude Code nie jest obecnie obsługiwany.
+ur-agents odczytuje lokalne dane sesji GitHub Copilot i uruchamia agenty przez Copilot CLI. Wybór sesji otwiera jej dokładną trasę w GitHub Copilot. Inni dostawcy nie są obsługiwani.
 
 Zasady:
 
@@ -187,7 +176,7 @@ Stan wyprowadzamy ze zdarzeń; **każdy stan ma własny klip animacji i dymek z 
 | Rodzina | Rozpoznanie | Projekt |
 |---|---|---|
 | Claude | `claude-*` | pomarańczowy klockowaty stworek, dwa czarne prostokątne oczy, boczne „łapki", krótkie nóżki (ref. #1) |
-| Codex / GPT | `gpt-*`, `*codex*` | ciemny zaokrąglony robocik z ekranem-twarzą, cyjanowe oczy, słuchawki (ref. #2) |
+| GPT | `gpt-*` | ciemny zaokrąglony robocik z ekranem-twarzą, cyjanowe oczy, słuchawki (ref. #2) |
 | Gemini | `gemini-*` | ten sam styl: błękitno-fioletowy, okrągłe „bańki"-oczy, dwuczęściowa głowa |
 | Grok | `grok-*` | grafitowo-czarny minimalista, ukośny wizjer zamiast oczu, antenka |
 | MAI | `mai-*` | jasny, własna paleta (opcjonalnie) |
@@ -237,8 +226,8 @@ Stan wyprowadzamy ze zdarzeń; **każdy stan ma własny klip animacji i dymek z 
 ## 9. Decyzje do potwierdzenia
 
 1. **Kafelek = sesja**, sub-agenci jako mniejsze postacie przy biurku rodzica — czy tak, czy każdy sub-agent ma mieć własną strefę?
-2. **Styl 3D:** wg Twoich referencji (chunky figurki-robociki) — zatwierdzone. Czy ref. #1 = Claude, a ref. #2 = Codex/GPT? Czy rodziny mają być bardzo podobne (ten sam rig, inna bryła/kolor), czy bardziej zróżnicowane?
-3. **Rodziny postaci** (tabela w sekcji 6): Claude, Codex/GPT, Gemini, Grok, generic (+ MAI). Brakuje czegoś (Mistral, DeepSeek…)? Mam zaproponować własne projekty, czy podasz referencje dla każdej?
+2. **Styl 3D:** wg Twoich referencji (chunky figurki-robociki) — zatwierdzone. Czy ref. #1 = Claude, a ref. #2 = GPT? Czy rodziny mają być bardzo podobne (ten sam rig, inna bryła/kolor), czy bardziej zróżnicowane?
+3. **Rodziny postaci** (tabela w sekcji 6): Claude, GPT, Gemini, Grok, generic (+ MAI). Brakuje czegoś (Mistral, DeepSeek…)? Mam zaproponować własne projekty, czy podasz referencje dla każdej?
 4. **Skąd modele:** prototyp proceduralny w kodzie (rekomendowane), potem własne GLB — OK?
 5. **Zakres sterowania w v1:** wiadomość, Stop, odpowiedź na pytanie, zatwierdzanie uprawnień, zmiana modelu/trybu — czy wszystko, czy zawęzić (np. bez zatwierdzania uprawnień)?
 6. **Repo publiczne czy prywatne?** (fixtures, anonimizacja) · **Nazwa** — robocza: `ur-agents`.

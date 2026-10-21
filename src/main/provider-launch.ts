@@ -1,23 +1,22 @@
 import { spawnSync } from 'node:child_process';
-import type { AgentProvider } from '../core/types.ts';
 import { PROVIDERS } from '../core/providers.ts';
 import { keepWindowVisibleAfterProviderLaunch, type WindowVisibility } from './provider-window.ts';
 
 type OpenExternal = (url: string) => Promise<void>;
-type IsProviderRunning = (provider: AgentProvider) => boolean;
+type IsProviderRunning = () => boolean;
 
 /** Check the exact desktop app process without activating it or changing its window. */
-export function isProviderAppRunning(provider: AgentProvider): boolean {
+export function isProviderAppRunning(): boolean {
   if (process.platform !== 'win32') return false;
   try {
     const result = spawnSync('tasklist.exe', [
-      '/FI', `IMAGENAME eq ${PROVIDERS[provider].processName}`,
+      '/FI', `IMAGENAME eq ${PROVIDERS.copilot.processName}`,
       '/FO', 'CSV', '/NH',
     ], { encoding: 'utf8', windowsHide: true, timeout: 3000 });
     if (result.status !== 0 || result.error) return false;
     return result.stdout.split(/\r?\n/).some((line) => {
       const imageName = /^\s*"([^"]+)"/.exec(line)?.[1];
-      return imageName?.toLowerCase() === PROVIDERS[provider].processName.toLowerCase();
+      return imageName?.toLowerCase() === PROVIDERS.copilot.processName.toLowerCase();
     });
   } catch {
     // If process enumeration is unavailable, preserve the launch behavior.
@@ -27,13 +26,12 @@ export function isProviderAppRunning(provider: AgentProvider): boolean {
 
 /** Open a closed companion app in the background, or leave a running one untouched. */
 export async function launchProviderApp(
-  provider: AgentProvider,
   openExternal: OpenExternal,
   window: WindowVisibility | null,
   schedule?: (callback: () => void, delayMs: number) => unknown,
   providerIsRunning: IsProviderRunning = isProviderAppRunning,
 ): Promise<void> {
-  if (providerIsRunning(provider)) {
+  if (providerIsRunning()) {
     if (window && !window.isDestroyed()) {
       if (window.isMinimized()) window.restore();
       else if (!window.isVisible()) window.showInactive();
@@ -46,7 +44,7 @@ export async function launchProviderApp(
   // Re-focus UR Agents after launch so the companion app opens behind the dashboard.
   const recover = window ? keepWindowVisibleAfterProviderLaunch(window, schedule) : undefined;
   try {
-    await openExternal(PROVIDERS[provider].appUrl);
+    await openExternal(PROVIDERS.copilot.appUrl);
   } finally {
     recover?.();
   }

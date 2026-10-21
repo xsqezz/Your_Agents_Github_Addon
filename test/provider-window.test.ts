@@ -69,28 +69,26 @@ test('provider launch keeps an already visible dashboard in place', () => {
   assert.equal(delays.length, 6);
 });
 
-for (const [provider, expectedUrl] of [['copilot', 'ghapp://chats'], ['codex', 'codex://']] as const) {
-  test(`${provider} provider launch opens its companion and restores UR Agents`, async () => {
-    const fake = fakeWindow({ minimized: true, visible: false });
-    const scheduled: Array<() => void> = [];
-    const delays: number[] = [];
-    let openedUrl = '';
-    await launchProviderApp(provider, async (url) => {
-      openedUrl = url;
-      fake.state.visible = false;
-      fake.emit('hide');
-    }, fake.window, (callback, delay) => { scheduled.push(callback); delays.push(delay); }, () => false);
-    assert.equal(openedUrl, expectedUrl);
-    assert.deepEqual(fake.counts(), { restores: 1, inactiveShows: 1, focuses: 3 });
-    assert.deepEqual(delays, [250, 1000, 2500, 5000, 8000, 10000]);
-    assert.equal(scheduled.length, 6);
-  });
-}
+test('Copilot launch opens its companion and restores UR Agents', async () => {
+  const fake = fakeWindow({ minimized: true, visible: false });
+  const scheduled: Array<() => void> = [];
+  const delays: number[] = [];
+  let openedUrl = '';
+  await launchProviderApp(async (url) => {
+    openedUrl = url;
+    fake.state.visible = false;
+    fake.emit('hide');
+  }, fake.window, (callback, delay) => { scheduled.push(callback); delays.push(delay); }, () => false);
+  assert.equal(openedUrl, 'ghapp://chats');
+  assert.deepEqual(fake.counts(), { restores: 1, inactiveShows: 1, focuses: 3 });
+  assert.deepEqual(delays, [250, 1000, 2500, 5000, 8000, 10000]);
+  assert.equal(scheduled.length, 6);
+});
 
 test('when provider is already running, leave it untouched and focus UR Agents', async () => {
   const fake = fakeWindow();
   let opened = false;
-  await launchProviderApp('codex', async () => { opened = true; }, fake.window, undefined, () => true);
+  await launchProviderApp(async () => { opened = true; }, fake.window, undefined, () => true);
   assert.equal(opened, false);
   assert.deepEqual(fake.counts(), { restores: 0, inactiveShows: 0, focuses: 1 });
 });
@@ -98,7 +96,7 @@ test('when provider is already running, leave it untouched and focus UR Agents',
 test('when provider is closed, launch it and keep UR Agents focused', async () => {
   const fake = fakeWindow();
   let openedUrl = '';
-  await launchProviderApp('copilot', async (url) => { openedUrl = url; }, fake.window, undefined, () => false);
+  await launchProviderApp(async (url) => { openedUrl = url; }, fake.window, undefined, () => false);
   assert.equal(openedUrl, 'ghapp://chats');
   assert.ok(fake.counts().focuses >= 2);
 });

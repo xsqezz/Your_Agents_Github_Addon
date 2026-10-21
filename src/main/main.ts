@@ -2,16 +2,13 @@ import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain, nativeImage, Notification, screen, shell } from 'electron';
-import type { AgentProvider, AgentState, SessionSummary, Snapshot } from '../core/types.ts';
+import type { AgentState, SessionSummary, Snapshot } from '../core/types.ts';
 import { PROVIDERS } from '../core/providers.ts';
 import type { Controller } from '../core/control.ts';
 import { ControlServer } from './control.ts';
 import { DemoSource } from './demo.ts';
 import { DemoControl } from './democontrol.ts';
 import { LiveSource, resolveHome } from './live.ts';
-import { CodexSource, CombinedSource } from './codex.ts';
-import { AgentsApiKeyStore } from './agents-api-key.ts';
-import { OpenAIAgentsSource, type CreateCodexApiSessionRequest } from './agents-api.ts';
 import { CliLauncher, DemoLauncher, type Launcher } from './launcher.ts';
 import { launchProviderApp } from './provider-launch.ts';
 import type { Source } from './source.ts';
@@ -81,7 +78,7 @@ foreach ($linkPath in $links) {
   $link.WorkingDirectory = $workingDirectory
   $link.WindowStyle = 1
   $link.IconLocation = \"$icon,0\"
-  $link.Description = 'Monitor GitHub Copilot and ChatGPT Codex agents'
+  $link.Description = 'Monitor GitHub Copilot agents'
   $link.Save()
   [UraShortcutIdentity]::SetRelaunchIcon($linkPath, \"$icon,0\")
   [UraShortcutIdentity]::SetAppId($linkPath, $appId)
@@ -167,8 +164,6 @@ let win: BrowserWindow | null = null;
 let source: Source;
 let control: Controller;
 let launcher: Launcher;
-let codexApiSource: OpenAIAgentsSource | null = null;
-let agentsApiKeys: AgentsApiKeyStore | null = null;
 let latest: Snapshot = { rooms: [], sessions: [] };
 let primed = false;
 const lastStates = new Map<string, AgentState>();
@@ -180,7 +175,7 @@ function notifyAttention(list: SessionSummary[]): void {
     if (!primed || prev === s.state || !ATTENTION.includes(s.state) || !s.live) continue;
     if (win?.isFocused() || !Notification.isSupported()) continue;
     const body = s.state === 'awaiting-permission' ? `Needs permission — ${s.activity}` : s.state === 'awaiting-input' ? `Asks: ${s.activity}` : `Error: ${s.activity}`;
-    const source = s.provider === 'codex' ? 'ChatGPT Codex' : s.provider === 'copilot' ? 'Copilot' : 'Agent';
+    const source = s.provider === 'copilot' ? 'Copilot' : 'Agent';
     const n = new Notification({ title: `${source} · ${s.title}`, body: body.slice(0, 200) });
     n.on('click', () => {
       win?.show();
@@ -304,9 +299,7 @@ app.whenReady().then(async () => {
     launcher = new DemoLauncher(() => control.state().enabled);
   } else {
     const live = new LiveSource(home);
-    agentsApiKeys = new AgentsApiKeyStore(app.getPath('userData'));
-    codexApiSource = new OpenAIAgentsSource(agentsApiKeys);
-    source = new CombinedSource(live, new CodexSource(), codexApiSource);
+    source = live;
     control = new ControlServer({ copilotHome: home, bridgeSource: path.join(__dirname, 'bridge'), onChange: pushControl });
     launcher = new CliLauncher(live, () => control.state().enabled);
   }
@@ -321,26 +314,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('ua:control-send', (_e, id: string, command: unknown) => control.send(String(id), command));
   ipcMain.handle('ua:launch', (_e, request: unknown) => launcher.launch(request));
   ipcMain.handle('ua:sign-in', () => launcher.signIn());
-  ipcMain.handle('ua:codex-api-key-status', () => !!agentsApiKeys?.read());
-  ipcMain.handle('ua:codex-api-set-key', (_e, key: unknown) => {
-    if (!codexApiSource || typeof key !== 'string') return { ok: false, error: 'Codex API tasks are unavailable.' };
-    return codexApiSource.validateKey(key);
-  });
-  ipcMain.handle('ua:codex-api-remove-key', () => {
-    if (!agentsApiKeys) return { ok: false, error: 'Codex API tasks are unavailable.' };
-    try { codexApiSource?.removeKey(); return { ok: true }; }
-    catch (e) { return { ok: false, error: (e as Error).message }; }
-  });
-  ipcMain.handle('ua:codex-api-create-session', (_e, request: unknown) => {
-    if (!codexApiSource || !request || typeof request !== 'object') return { ok: false, error: 'Codex API tasks are unavailable.' };
-    return codexApiSource.createSession(request as CreateCodexApiSessionRequest);
-  });
-  ipcMain.handle('ua:codex-api-send', (_e, id: unknown, message: unknown) => codexApiSource?.send(String(id), String(message)) ?? { ok: false, error: 'Codex API sessions are unavailable.' });
-  ipcMain.handle('ua:codex-api-cancel', (_e, id: unknown) => codexApiSource?.cancel(String(id)) ?? { ok: false, error: 'Codex API sessions are unavailable.' });
-  ipcMain.handle('ua:open-api-keys', async () => {
-    try { await shell.openExternal('https://platform.openai.com/api-keys'); return { ok: true }; }
-    catch (e) { return { ok: false, error: `Could not open OpenAI Platform: ${(e as Error).message}` }; }
-  });
   ipcMain.handle('ua:open-in-copilot', async (_e, sessionId: unknown) => {
     if (typeof sessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(sessionId)) return { ok: false, error: 'Invalid session ID.' };
     try {
@@ -350,24 +323,12 @@ app.whenReady().then(async () => {
       return { ok: false, error: `Could not open GitHub Copilot: ${(e as Error).message}` };
     }
   });
-  ipcMain.handle('ua:open-provider-app', async (_e, provider: unknown) => {
-    if (provider !== 'copilot' && provider !== 'codex') return { ok: false, error: 'Unsupported provider.' };
+  ipcMain.handle('ua:open-copilot-app', async () => {
     try {
-      await launchProviderApp(provider, (url) => shell.openExternal(url), win);
+      await launchProviderApp((url) => shell.openExternal(url), win);
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: `Could not open ${PROVIDERS[provider].label}: ${(e as Error).message}` };
-    }
-  });
-  ipcMain.handle('ua:open-in-codex', async (_e, sessionId: unknown) => {
-    if (typeof sessionId !== 'string' || !sessionId.startsWith('codex:')) return { ok: false, error: 'Invalid Codex thread ID.' };
-    const id = sessionId.slice('codex:'.length);
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: 'Invalid Codex thread ID.' };
-    try {
-      await shell.openExternal(`codex://threads/${id}`);
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: `Could not open ChatGPT: ${(e as Error).message}` };
+      return { ok: false, error: `Could not open ${PROVIDERS.copilot.label}: ${(e as Error).message}` };
     }
   });
   ipcMain.on('ua:win', (e, action: unknown) => {

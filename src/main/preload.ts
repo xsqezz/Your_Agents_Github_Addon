@@ -1,5 +1,4 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentProvider } from '../core/types.ts';
 
 contextBridge.exposeInMainWorld('ua', {
   info: () => ipcRenderer.invoke('ua:info'),
@@ -12,16 +11,8 @@ contextBridge.exposeInMainWorld('ua', {
   controlSend: (id: string, command: unknown) => ipcRenderer.invoke('ua:control-send', id, command),
   launch: (request: unknown) => ipcRenderer.invoke('ua:launch', request),
   signIn: () => ipcRenderer.invoke('ua:sign-in'),
-  codexApiKeyStatus: () => ipcRenderer.invoke('ua:codex-api-key-status'),
-  codexApiSetKey: (key: string) => ipcRenderer.invoke('ua:codex-api-set-key', key),
-  codexApiRemoveKey: () => ipcRenderer.invoke('ua:codex-api-remove-key'),
-  codexApiCreateSession: (request: unknown) => ipcRenderer.invoke('ua:codex-api-create-session', request),
-  codexApiSend: (id: string, message: string) => ipcRenderer.invoke('ua:codex-api-send', id, message),
-  codexApiCancel: (id: string) => ipcRenderer.invoke('ua:codex-api-cancel', id),
-  openApiKeys: () => ipcRenderer.invoke('ua:open-api-keys'),
   openInCopilot: (sessionId: string) => ipcRenderer.invoke('ua:open-in-copilot', sessionId),
-  openInCodex: (sessionId: string) => ipcRenderer.invoke('ua:open-in-codex', sessionId),
-  openProviderApp: (provider: AgentProvider) => ipcRenderer.invoke('ua:open-provider-app', provider),
+  openCopilotApp: () => ipcRenderer.invoke('ua:open-copilot-app'),
   winAction: (action: string) => ipcRenderer.send('ua:win', action),
   winResize: (edge: string | null) => ipcRenderer.send('ua:win-resize', edge),
   onWinState: (cb: (state: unknown) => void) => {

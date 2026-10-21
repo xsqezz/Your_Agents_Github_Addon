@@ -1,6 +1,5 @@
 import { FAMILY_LABEL } from '../core/family.ts';
-import type { AgentProvider, AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
-import { PROVIDERS } from '../core/providers.ts';
+import type { AgentState, RoomInfo, SessionDetail, SessionSummary, Snapshot, TimelineItem } from '../core/types.ts';
 import type { ControlCommand, ControlResult, ControlState } from '../core/control.ts';
 import type { LaunchResult } from '../core/launch.ts';
 import { initControl, renderControl } from './control.ts';
@@ -8,13 +7,12 @@ import { initCredits } from './credits.ts';
 import { initLauncher, openLauncher, renderLauncher, toast } from './launch.ts';
 import { OfficeScene } from './scene.ts';
 import { MIN_DESKS } from './layout.ts';
-import { providerFromClickTarget } from './provider-selection.ts';
 import { ago, duration, NEEDS_YOU, STATE_COLOR, STATE_ICON, STATE_LABEL, stateText } from './theme.ts';
 
 declare global {
   interface Window {
     ua: {
-      info(): Promise<{ mode: 'live' | 'demo'; home: string; providerKeys?: AgentProvider[] }>;
+      info(): Promise<{ mode: 'live' | 'demo'; home: string }>;
       list(): Promise<Snapshot>;
       detail(id: string, since: number): Promise<SessionDetail | null>;
       onSummaries(cb: (snapshot: Snapshot) => void): void;
@@ -26,16 +24,8 @@ declare global {
       controlSend(id: string, command: ControlCommand): Promise<ControlResult>;
       launch(request: unknown): Promise<LaunchResult>;
       signIn(): Promise<LaunchResult>;
-      codexApiKeyStatus(): Promise<boolean>;
-      codexApiSetKey(key: string): Promise<{ ok: boolean; error?: string }>;
-      codexApiRemoveKey(): Promise<{ ok: boolean; error?: string }>;
-      codexApiCreateSession(request: unknown): Promise<{ ok: boolean; error?: string; id?: string }>;
-      codexApiSend(id: string, message: string): Promise<{ ok: boolean; error?: string }>;
-      codexApiCancel(id: string): Promise<{ ok: boolean; error?: string }>;
-      openApiKeys(): Promise<{ ok: boolean; error?: string }>;
       openInCopilot(sessionId: string): Promise<{ ok: boolean; error?: string }>;
-      openInCodex(sessionId: string): Promise<{ ok: boolean; error?: string }>;
-      openProviderApp(provider: AgentProvider): Promise<{ ok: boolean; error?: string }>;
+      openCopilotApp(): Promise<{ ok: boolean; error?: string }>;
       winAction(action: 'minimize' | 'maximize' | 'close'): void;
       winResize(edge: string | null): void;
       onWinState(cb: (state: { maximized: boolean; fullscreen: boolean }) => void): void;
@@ -56,26 +46,14 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: { class?: strin
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const params = new URLSearchParams(location.search);
-const CODEX_ALL_ROOM = 'codex:all';
-const CODEX_API_ROOM = 'codex:api';
-type ProviderKey = AgentProvider;
-const providerKey = (value: string | null): ProviderKey | null => value && Object.prototype.hasOwnProperty.call(PROVIDERS, value) ? value as ProviderKey : null;
-const normalizeProvider = (value: string | null): ProviderKey | null => value === 'work' ? 'codex' : providerKey(value);
-const routeRoom = params.get('room');
-const activeProvider: ProviderKey = normalizeProvider(params.get('provider')) ?? (routeRoom?.startsWith('codex:') || routeRoom?.startsWith('codex-api:') || routeRoom?.startsWith('work:') ? 'codex' : null) ?? normalizeProvider(localStorage.getItem('ua.provider')) ?? 'copilot';
-const savedRoom = localStorage.getItem(`ua.room.${activeProvider}`) ?? (activeProvider === 'codex' ? localStorage.getItem('ua.room.work') : null) ?? (activeProvider === 'copilot' ? localStorage.getItem('ua.room') : null);
-const initialRoomValue = routeRoom ?? savedRoom ?? '';
-const initialRoom = initialRoomValue === 'work:all' ? CODEX_API_ROOM : initialRoomValue.startsWith('work:') ? CODEX_API_ROOM : initialRoomValue;
-const initialView = params.get('view') ?? localStorage.getItem(`ua.view.${activeProvider}`) ?? (activeProvider === 'codex' ? 'list' : localStorage.getItem('ua.view') ?? '3d');
-type SidebarView = 'rooms' | 'chats';
-let sidebarView: SidebarView = activeProvider === 'codex' && (localStorage.getItem('ua.sidebar.codex') ?? localStorage.getItem('ua.sidebar.work')) !== 'rooms' ? 'chats' : 'rooms';
+const initialRoom = params.get('room') ?? localStorage.getItem('ua.room.copilot') ?? localStorage.getItem('ua.room') ?? '';
+const initialView = params.get('view') ?? localStorage.getItem('ua.view.copilot') ?? localStorage.getItem('ua.view') ?? '3d';
 const store = {
   all: [] as SessionSummary[],
   rooms: [] as RoomInfo[],
   room: initialRoom,
   roomPinned: params.get('room') != null || initialRoom !== '',
   selectedId: null as string | null,
-  activeProvider,
   view: initialView as '3d' | 'list',
   showOffline: localStorage.getItem('ua.offline.v2') !== '0',
   tab: 'live' as 'live' | 'info',
@@ -83,7 +61,6 @@ const store = {
   since: 0,
   mode: 'live' as 'live' | 'demo',
   home: '',
-  availableProviders: [] as AgentProvider[],
 };
 
 const stage = $('stage');
@@ -95,13 +72,9 @@ let scene: OfficeScene;
 let announcedStates = new Map<string, AgentState>();
 let primed = false;
 
-const providerSessions = (): SessionSummary[] => store.mode === 'demo' ? store.all : store.all.filter((s) => (s.provider ?? 'copilot') === store.activeProvider);
-const providerRooms = (): RoomInfo[] => store.mode === 'demo' ? store.rooms : store.rooms.filter((r) => (r.provider ?? 'copilot') === store.activeProvider);
-const roomSessions = (id: string): SessionSummary[] => store.activeProvider === 'codex' && id === CODEX_ALL_ROOM ? providerSessions() : providerSessions().filter((s) => s.room === id);
-const isCodexApiSession = (session: Pick<SessionSummary, 'id'> | string): boolean => {
-  const id = typeof session === 'string' ? session : session.id;
-  return id.startsWith('codex-api:') || id.startsWith('work:');
-};
+const providerSessions = (): SessionSummary[] => store.all;
+const providerRooms = (): RoomInfo[] => store.rooms;
+const roomSessions = (id: string): SessionSummary[] => providerSessions().filter((s) => s.room === id);
 const shown = (list: SessionSummary[]): SessionSummary[] => (store.showOffline ? list : list.filter((s) => s.state !== 'offline'));
 /** Agents in the room you are in. */
 const visible = (): SessionSummary[] => shown(roomSessions(store.room));
@@ -112,80 +85,9 @@ const selected = (): SessionSummary | undefined => providerSessions().find((s) =
 const panelPx = (): number => (store.selectedId ? Math.min(440, Math.round(window.innerWidth * 0.46)) : 0);
 const roomsPx = (): number => (providerRooms().length > 1 ? $('rooms').offsetWidth + 12 : 0);
 
-function migrateCodexDefaultRoom(): void {
-  if (store.activeProvider !== 'codex' || params.has('room') || localStorage.getItem('ua.codex.all-threads-default.v1') === '1') return;
-  store.room = CODEX_ALL_ROOM;
-  store.roomPinned = true;
-  localStorage.setItem('ua.room.codex', CODEX_ALL_ROOM);
-  localStorage.setItem('ua.codex.all-threads-default.v1', '1');
-}
-
-let providerButtonsSig = '';
-
-function renderProviderSwitch(): void {
-  const box = $('provider-switch');
-  const choice = box.closest<HTMLElement>('.provider-choice')!;
-  const providers = store.mode === 'demo' ? [] : store.availableProviders.filter((key) => Object.prototype.hasOwnProperty.call(PROVIDERS, key));
-  const sig = providers.join('|');
-  if (sig !== providerButtonsSig) {
-    providerButtonsSig = sig;
-    box.replaceChildren(...providers.map((key) => {
-      const button = h('button', { text: PROVIDERS[key].buttonLabel, attrs: { type: 'button', 'data-provider': key, title: `Show ${PROVIDERS[key].label} sessions` } });
-      return button;
-    }));
-    const options = $('provider-picker-options');
-    options.replaceChildren(...providers.map((key) => {
-      const button = h('button', { class: 'provider-option', attrs: { type: 'button', 'data-provider': key, title: `Show ${PROVIDERS[key].label} sessions` } },
-        h('span', { class: 'provider-option-title', text: PROVIDERS[key].label }),
-        h('span', { class: 'provider-option-description', text: PROVIDERS[key].description }),
-      );
-      return button;
-    }));
-  }
-  box.hidden = providers.length < 2;
-  choice.hidden = providers.length < 2;
-  for (const button of box.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.provider === store.activeProvider));
-  }
-  for (const button of $('provider-picker-options').querySelectorAll<HTMLButtonElement>('[data-provider]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.provider === store.activeProvider));
-  }
-}
-
-function providerLabel(provider: ProviderKey = store.activeProvider): string {
-  return PROVIDERS[provider].label;
-}
-
-function openProviderApp(provider: ProviderKey): void {
-  if (store.mode === 'demo' || !store.availableProviders.includes(provider)) return;
-  void window.ua.openProviderApp(provider).then((result) => {
-    if (!result.ok) toast(`Could not open ${providerLabel(provider)}. Start it from Windows and try again.`, true);
-  }).catch(() => toast(`Could not open ${providerLabel(provider)}. Start it from Windows and try again.`, true));
-}
-
-function openProviderLauncher(): void {
-  if (store.mode !== 'demo' && store.activeProvider === 'codex') {
-    void window.ua.codexApiKeyStatus().then((configured) => {
-      if (configured) {
-        if (store.room !== CODEX_API_ROOM) switchRoom(CODEX_API_ROOM);
-        openLauncher();
-      } else openApiKeyDialog(() => {
-        if (store.room !== CODEX_API_ROOM) switchRoom(CODEX_API_ROOM);
-        openLauncher();
-      });
-    }).catch(() => {
-      openApiKeyDialog(() => {
-        if (store.room !== CODEX_API_ROOM) switchRoom(CODEX_API_ROOM);
-        openLauncher();
-      });
-      $('api-key-error').textContent = 'Could not check the saved API key. Enter it again to continue.';
-      $('api-key-error').hidden = false;
-    });
-    return;
-  }
-  if (store.mode !== 'demo' && store.activeProvider !== 'copilot') return;
+function openCopilotLauncher(): void {
   if (!currentRoom()?.canLaunch) {
-    toast('Start a task in the ChatGPT app to add it here.');
+    toast('This room cannot start a Copilot agent. Select a project room first.');
     return;
   }
   openLauncher();
@@ -213,16 +115,14 @@ function renderTopbar(): void {
     }),
   );
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === store.view));
-  renderProviderSwitch();
-  $('control-option').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
-  $('codex-key-settings').hidden = store.mode === 'demo' || store.activeProvider !== 'codex';
-  $('credits').hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot';
+  $('control-option').hidden = false;
+  $('credits').hidden = false;
   ($('show-offline') as HTMLInputElement).checked = store.showOffline;
   $('overview').hidden = store.view !== '3d';
   const newAgent = $<HTMLButtonElement>('new-agent');
-  newAgent.hidden = store.mode !== 'demo' && store.activeProvider !== 'copilot' && store.activeProvider !== 'codex';
-  newAgent.disabled = store.activeProvider === 'codex' ? !providerRooms().some((room) => room.id === CODEX_API_ROOM && room.canLaunch) : !currentRoom()?.canLaunch;
-  newAgent.title = store.activeProvider === 'codex' ? 'Start a new Codex API task (N)' : currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Start a task in the Copilot app to add it here';
+  newAgent.hidden = false;
+  newAgent.disabled = !currentRoom()?.canLaunch;
+  newAgent.title = currentRoom()?.canLaunch ? 'Start a new GitHub Copilot agent in this room (N)' : 'Select a project room to start an agent';
 }
 
 /* ───────────── rooms ───────────── */
@@ -241,25 +141,20 @@ let roomsSig = '';
 function renderRooms(): void {
   const box = $('rooms');
   const rooms = providerRooms();
-  const chatSidebar = store.mode !== 'demo' && store.activeProvider === 'codex';
-  const chats = chatSidebar ? shown(providerSessions()).slice().sort((a, b) => b.lastEventAt - a.lastEventAt) : [];
-  const multi = rooms.length > 1 || chatSidebar;
-  const showChats = chatSidebar && sidebarView === 'chats';
+  const multi = rooms.length > 1;
   box.hidden = !multi;
-  box.setAttribute('aria-label', showChats ? `${providerLabel()} chats` : 'Rooms');
+  box.setAttribute('aria-label', 'Rooms');
   document.body.classList.toggle('has-rooms', multi);
   if (!multi) return;
-  const sig = [sidebarView, store.activeProvider, store.showOffline, store.selectedId ?? '', ...rooms
+  const sig = [store.showOffline, store.selectedId ?? '', ...rooms
     .map((r) => {
       const st = roomStats(r.id);
       return `${r.id}:${r.name}:${st.needs}:${st.working}:${r.id === store.room ? 1 : 0}`;
-    }), ...chats.map((s) => `${s.id}:${s.title}:${s.room}:${s.state}:${s.lastEventAt}`)].join('|');
+    })].join('|');
   if (sig === roomsSig) return;
   roomsSig = sig;
   const hadFocus = box.contains(document.activeElement);
-  const focusedSidebarItem = document.activeElement as HTMLElement;
-  const focusedChatId = focusedSidebarItem.dataset.chatId;
-  const focusedSidebarView = focusedSidebarItem.dataset.sidebarView;
+  const focusedRoomId = (document.activeElement as HTMLElement).dataset.room;
   const rows = rooms.map((r) => {
     const st = roomStats(r.id);
     const btn = h(
@@ -273,35 +168,13 @@ function renderRooms(): void {
     return h('li', {}, btn);
   });
   const roomList = $('room-list');
-  const chatList = $('chat-list');
-  roomList.hidden = showChats;
-  chatList.hidden = !showChats;
   roomList.replaceChildren(...rows);
-  const chatRows = chats.map((s) => {
-    const dot = h('i', { class: 'dot', attrs: { 'aria-label': stateText(s) } });
-    dot.style.background = STATE_COLOR[s.state];
-    return h('li', {}, h('button', {
-      class: 'chat-entry',
-      attrs: { type: 'button', 'data-chat-id': s.id, 'aria-current': String(s.id === store.selectedId), title: s.title, 'aria-label': s.title },
-    }, dot,
-    h('span', { class: 'chat-copy' }, h('span', { class: 'chat-title', text: s.title }))));
-  });
-  chatList.replaceChildren(...chatRows);
-  $('rooms-heading').textContent = showChats ? 'Chats' : 'Rooms';
-  $('rooms-count').textContent = String(showChats ? chats.length : rooms.length);
-  const tabs = $('sidebar-tabs');
-  tabs.hidden = !chatSidebar;
-  for (const button of tabs.querySelectorAll<HTMLButtonElement>('[data-sidebar-view]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.sidebarView === sidebarView));
-  }
-  const cur = (showChats ? chatList : roomList).querySelector<HTMLElement>('[aria-current="true"]');
+  $('rooms-heading').textContent = 'Rooms';
+  $('rooms-count').textContent = String(rooms.length);
+  const cur = roomList.querySelector<HTMLElement>('[aria-current="true"]');
   cur?.scrollIntoView({ block: 'nearest' });
   if (hadFocus) {
-    const focused = focusedSidebarView
-      ? [...tabs.querySelectorAll<HTMLElement>('[data-sidebar-view]')].find((item) => item.dataset.sidebarView === focusedSidebarView)
-      : focusedChatId && showChats
-        ? [...chatList.querySelectorAll<HTMLElement>('[data-chat-id]')].find((item) => item.dataset.chatId === focusedChatId)
-        : null;
+    const focused = focusedRoomId ? [...roomList.querySelectorAll<HTMLElement>('[data-room]')].find((item) => item.dataset.room === focusedRoomId) : null;
     (focused ?? cur)?.focus({ preventScroll: true });
   }
 }
@@ -311,78 +184,10 @@ function switchRoom(id: string, keepSelection = false): void {
   if (id === store.room || !providerRooms().some((r) => r.id === id)) return;
   store.room = id;
   store.roomPinned = true;
-  localStorage.setItem(`ua.room.${store.activeProvider}`, id);
-  if (store.activeProvider === 'copilot') localStorage.setItem('ua.room', id);
+  localStorage.setItem('ua.room.copilot', id);
+  localStorage.setItem('ua.room', id);
   if (!keepSelection) select(null);
   render();
-}
-
-let afterCodexKeySaved: (() => void) | null = null;
-
-function openApiKeyDialog(afterSaved?: () => void): void {
-  afterCodexKeySaved = afterSaved ?? null;
-  const dialog = $<HTMLDialogElement>('api-key-dialog');
-  $('api-key-error').textContent = '';
-  $('api-key-error').hidden = true;
-  $('remove-api-key').hidden = true;
-  if (!dialog.open) dialog.showModal();
-  $<HTMLInputElement>('api-key-input').focus();
-  void window.ua.codexApiKeyStatus().then((configured) => { $('remove-api-key').hidden = !configured; }).catch(() => {
-    $('api-key-error').textContent = 'Could not check the saved API key. Enter it again to continue.';
-    $('api-key-error').hidden = false;
-  });
-}
-
-function activateProvider(provider: ProviderKey): void {
-  const picker = $('provider-picker') as HTMLDialogElement;
-  if (picker.open) picker.close();
-  if (provider === store.activeProvider) {
-    openProviderApp(provider);
-    return;
-  }
-  localStorage.setItem(`ua.view.${store.activeProvider}`, store.view);
-  store.activeProvider = provider;
-  sidebarView = provider === 'codex' && (localStorage.getItem('ua.sidebar.codex') ?? localStorage.getItem('ua.sidebar.work')) === 'rooms' ? 'rooms' : provider === 'codex' ? 'chats' : 'rooms';
-  localStorage.setItem('ua.provider', provider);
-  store.room = localStorage.getItem(`ua.room.${provider}`) ?? '';
-  store.view = (localStorage.getItem(`ua.view.${provider}`) ?? (provider === 'codex' ? 'list' : '3d')) as '3d' | 'list';
-  localStorage.setItem('ua.view', store.view);
-  migrateCodexDefaultRoom();
-  store.roomPinned = store.room !== '';
-  store.selectedId = null;
-  store.since = 0;
-  store.follow = true;
-  timelineEls.clear();
-  timelineBox = $('timeline') as HTMLOListElement;
-  timelineBox.replaceChildren();
-  roomsSig = '';
-  scene.setSelected(null, panelPx());
-  render();
-  scene.frameAll(true);
-  openProviderApp(provider);
-}
-
-function switchProvider(provider: ProviderKey): void {
-  if (!store.availableProviders.includes(provider)) return;
-  if (provider !== 'codex') { activateProvider(provider); return; }
-  void window.ua.codexApiKeyStatus().then((configured) => {
-    if (configured) activateProvider(provider);
-    else {
-      const picker = $('provider-picker') as HTMLDialogElement;
-      if (picker.open) picker.close();
-      openApiKeyDialog(() => {
-        activateProvider(provider);
-      });
-    }
-  }).catch(() => {
-    const picker = $('provider-picker') as HTMLDialogElement;
-    if (picker.open) picker.close();
-    openApiKeyDialog(() => {
-      activateProvider(provider);
-    });
-    $('api-key-error').textContent = 'Could not check the saved API key. Enter it again to continue.';
-    $('api-key-error').hidden = false;
-  });
 }
 
 function stepRoom(dir: number): void {
@@ -427,7 +232,7 @@ function renderList(): void {
       h('td', { text: `${FAMILY_LABEL[s.family]} · ${s.model || '?'}` }),
       h('td', { class: 'c-act', text: s.state === 'offline' ? '' : s.activity }),
       ctx,
-      h('td', { text: s.costUsd != null ? `$${s.costUsd.toFixed(2)}${s.costUsdLimit != null ? ` / $${s.costUsdLimit.toFixed(2)}` : ''}` : s.costAiu != null ? `${s.costAiu.toFixed(1)} AIU` : '–' }),
+      h('td', { text: s.costAiu != null ? `${s.costAiu.toFixed(1)} AIU` : '–' }),
       h('td', { text: s.lastEventAt ? ago(s.lastEventAt, now) : '–' }));
     if (s.id === store.selectedId) tr.classList.add('is-selected');
     body.append(tr);
@@ -503,15 +308,11 @@ function renderPanel(): void {
   const head = $('panel-head');
   const dot = h('i', { class: 'dot' });
   dot.style.background = STATE_COLOR[s.state];
-  const isCodex = s.provider === 'codex';
-  const isApiTask = isCodexApiSession(s);
-  const openInApp = h('button', { class: 'btn small', text: 'Open in ChatGPT', attrs: { type: 'button', title: isApiTask ? 'Open the ChatGPT desktop app' : 'Open this thread in the ChatGPT desktop app' } });
+  const openInApp = h('button', { class: 'btn small', text: 'Open in Copilot', attrs: { type: 'button', title: 'Open this session in the GitHub Copilot app' } });
   openInApp.addEventListener('click', () => {
-    const opening = isApiTask ? window.ua.openProviderApp('codex') : isCodex ? window.ua.openInCodex(s.id) : window.ua.openInCopilot(s.id);
-    void opening.then((r) => {
-      const appName = isCodex ? 'ChatGPT' : 'GitHub Copilot';
-      toast(r.ok ? `Opened this session in ${appName}.` : (r.error ?? `Could not open ${appName}.`), !r.ok);
-    }).catch(() => toast(`Could not open ${isCodex ? 'ChatGPT' : 'GitHub Copilot'}.`, true));
+    void window.ua.openInCopilot(s.id).then((r) => {
+      toast(r.ok ? 'Opened this session in GitHub Copilot.' : (r.error ?? 'Could not open GitHub Copilot.'), !r.ok);
+    }).catch(() => toast('Could not open GitHub Copilot.', true));
   });
   head.replaceChildren(
     h('div', { class: 'ph-row' },
@@ -540,7 +341,6 @@ function kv(k: string, v: Child): HTMLElement[] {
 }
 
 function renderInfo(s: SessionSummary): void {
-  const isApiTask = isCodexApiSession(s);
   const now = Date.now();
   const ctx = h('span', { class: 'ctxline' });
   if (s.contextPct != null) {
@@ -555,7 +355,7 @@ function renderInfo(s: SessionSummary): void {
   }
 
   const copy = h('button', { class: 'link-btn', text: 'Copy', attrs: { type: 'button' } });
-  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.provider === 'codex' ? s.id.slice((isApiTask ? (s.id.startsWith('work:') ? 'work:' : 'codex-api:') : 'codex:').length) : s.id));
+  copy.addEventListener('click', () => void navigator.clipboard?.writeText(s.id));
 
   const dl = h('dl', { class: 'kv' },
     ...kv('Status', `${stateText(s)}${s.state === 'offline' ? '' : ` since ${ago(s.stateSince, now)} ago`}`),
@@ -563,7 +363,7 @@ function renderInfo(s: SessionSummary): void {
     ...kv('Model', `${s.model || 'unknown'} (${FAMILY_LABEL[s.family]})`),
     ...kv('Mode', s.mode ?? '–'),
     ...kv('Context', ctx),
-    ...kv('Cost', s.costUsd != null ? `$${s.costUsd.toFixed(2)}${s.costUsdLimit != null ? ` / $${s.costUsdLimit.toFixed(2)}` : ''}` : s.costAiu != null ? `${s.costAiu.toFixed(2)} AIU${s.premiumRequests != null ? ` · ${s.premiumRequests} premium requests` : ''}` : '–'),
+    ...kv('Cost', s.costAiu != null ? `${s.costAiu.toFixed(2)} AIU${s.premiumRequests != null ? ` · ${s.premiumRequests} premium requests` : ''}` : '–'),
     ...kv('Activity', `${s.toolCalls} tool calls · ${s.turns} turns · ${s.hooks} hook runs`),
     ...kv('Last event', s.lastEventAt ? `${ago(s.lastEventAt, now)} ago` : '–'),
     ...kv('Sub-agents', s.subagents.length ? subs : 'none'),
@@ -575,7 +375,7 @@ function renderInfo(s: SessionSummary): void {
     dl,
     h('section', { class: 'note' },
       h('h3', { text: 'Controls' }),
-      h('p', { text: isApiTask ? 'This Codex API task runs in an OpenAI-hosted environment. Send messages and cancel active work here. API usage is billed to your Platform project, separately from your ChatGPT subscription.' : s.provider === 'codex' ? 'History is read through the official local Codex App Server. Open this thread in the ChatGPT app to reply, stop the task or handle approval requests.' : 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
+      h('p', { text: 'Sending messages, stopping an agent and answering or approving requests need the bridge extension. Not installed yet — this version only watches.' })),
   );
 }
 
@@ -589,7 +389,7 @@ async function pollDetail(): Promise<void> {
     if (d && store.selectedId === id) {
       store.since = d.rev;
       mergeItems(d.items);
-      $('src').textContent = d.source?.startsWith('Codex App Server') || d.source?.startsWith('OpenAI Agents API') ? d.source : d.source ? 'live from events.jsonl' : 'no event log for this session';
+      $('src').textContent = d.source ? 'live from events.jsonl' : 'no event log for this session';
     }
   } finally {
     pollBusy = false;
@@ -626,10 +426,10 @@ function render(): void {
   emptyEl.hidden = vis.length > 0 || store.view !== '3d';
   if (!vis.length) {
     const hidden = roomSessions(store.room).length;
-    emptyEl.querySelector('h2')!.textContent = currentRoom() ? `All desks are free in ${currentRoom()!.name}` : `No ${providerLabel()} sessions yet`;
+    emptyEl.querySelector('h2')!.textContent = currentRoom() ? `All desks are free in ${currentRoom()!.name}` : 'No GitHub Copilot sessions yet';
     emptyEl.querySelector('p')!.textContent = hidden
       ? `${hidden} past session${hidden > 1 ? 's are' : ' is'} hidden here. Turn on “Show offline” to seat them.`
-      : store.activeProvider === 'codex' ? 'Start a Codex Local or Worktree task in ChatGPT, or create a Codex API task with New agent.' : 'No agent has worked in this folder yet. Click a desk to start one.';
+      : 'No agent has worked in this folder yet. Click a desk to start one.';
   }
   if (store.selectedId && !vis.find((s) => s.id === store.selectedId)) select(null);
   renderPanel();
@@ -640,7 +440,7 @@ function render(): void {
 }
 
 function announce(list: SessionSummary[]): void {
-  for (const s of list.filter((item) => store.mode === 'demo' || (item.provider ?? 'copilot') === store.activeProvider)) {
+  for (const s of list) {
     const prev = announcedStates.get(s.id);
     announcedStates.set(s.id, s.state);
     if (primed && prev !== s.state && NEEDS_YOU.includes(s.state)) {
@@ -659,7 +459,7 @@ function cycle(dir: number): void {
 }
 
 function boot(): void {
-  scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openProviderLauncher });
+  scene = new OfficeScene(stage, { onSelect: select, onEmptyDesk: openCopilotLauncher });
   initControl(selected);
   initLauncher(currentRoom);
   initCredits();
@@ -671,23 +471,12 @@ function boot(): void {
     if (open?.dataset.id) select(open.dataset.id);
     const room = t.closest<HTMLElement>('[data-room]');
     if (room?.dataset.room) switchRoom(room.dataset.room);
-    const chat = t.closest<HTMLElement>('[data-chat-id]');
-    if (chat?.dataset.chatId) select(chat.dataset.chatId);
-    const sidebarTab = t.closest<HTMLElement>('[data-sidebar-view]');
-    if (sidebarTab && (sidebarTab.dataset.sidebarView === 'chats' || sidebarTab.dataset.sidebarView === 'rooms')) {
-      sidebarView = sidebarTab.dataset.sidebarView;
-      if (store.activeProvider === 'codex') localStorage.setItem('ua.sidebar.codex', sidebarView);
-      roomsSig = '';
-      renderRooms();
-    }
-    const provider = providerFromClickTarget(t);
-    if (provider) switchProvider(provider);
     if (t.closest('#panel-close')) select(null);
     const view = t.closest<HTMLElement>('[data-view]');
     if (view) {
       store.view = view.dataset.view as '3d' | 'list';
       localStorage.setItem('ua.view', store.view);
-      localStorage.setItem(`ua.view.${store.activeProvider}`, store.view);
+      localStorage.setItem('ua.view.copilot', store.view);
       render();
     }
     const tab = t.closest<HTMLElement>('[role=tab]');
@@ -702,57 +491,10 @@ function boot(): void {
       if (store.follow) $('tab-live').scrollTop = $('tab-live').scrollHeight;
     }
     if (t.closest('#overview')) scene.frameAll(true);
-    if (t.closest('#new-agent')) openProviderLauncher();
-    if (t.closest('#codex-key-settings')) openApiKeyDialog();
+    if (t.closest('#new-agent')) openCopilotLauncher();
     const winBtn = t.closest<HTMLElement>('[data-win]');
     if (winBtn) window.ua.winAction(winBtn.dataset.win as 'minimize' | 'maximize' | 'close');
   });
-  const apiKeyDialog = $<HTMLDialogElement>('api-key-dialog');
-  $('api-key-cancel').addEventListener('click', () => { afterCodexKeySaved = null; apiKeyDialog.close(); });
-  $('open-api-keys').addEventListener('click', () => {
-    void window.ua.openApiKeys().then((result) => { if (!result.ok) toast(result.error ?? 'Could not open the OpenAI Platform.', true); });
-  });
-  $('remove-api-key').addEventListener('click', () => {
-    if (!confirm('Remove the saved OpenAI API key from this computer?')) return;
-    void window.ua.codexApiRemoveKey().then((result) => {
-      if (!result.ok) { $('api-key-error').textContent = result.error ?? 'Could not remove the API key.'; $('api-key-error').hidden = false; return; }
-      $<HTMLInputElement>('api-key-input').value = '';
-      $('remove-api-key').hidden = true;
-      apiKeyDialog.close();
-      afterCodexKeySaved = null;
-      toast('OpenAI API key removed.');
-    });
-  });
-  $<HTMLFormElement>('api-key-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = $<HTMLInputElement>('api-key-input');
-    const save = $<HTMLButtonElement>('api-key-save');
-    const error = $('api-key-error');
-    const key = input.value.trim();
-    if (!key) { error.textContent = 'Paste an OpenAI API key to continue.'; error.hidden = false; input.focus(); return; }
-    save.disabled = true;
-    save.textContent = 'Checking…';
-    error.hidden = true;
-    try {
-      const result = await window.ua.codexApiSetKey(key);
-      if (!result.ok) { error.textContent = result.error ?? 'Could not validate this key.'; error.hidden = false; return; }
-      input.value = '';
-      apiKeyDialog.close();
-      toast('OpenAI API key checked and saved securely.');
-      const next = afterCodexKeySaved;
-      afterCodexKeySaved = null;
-      next?.();
-    } catch {
-      input.value = '';
-      error.textContent = 'Could not reach the API service.';
-      error.hidden = false;
-    } finally {
-      save.disabled = false;
-      save.textContent = 'Check and save key';
-    }
-  });
-  apiKeyDialog.addEventListener('close', () => { $<HTMLInputElement>('api-key-input').value = ''; });
-  apiKeyDialog.addEventListener('cancel', () => { afterCodexKeySaved = null; });
   window.ua.onWinState((s) => {
     document.body.classList.toggle('maximized', s.maximized);
     document.body.classList.toggle('fullscreen', s.fullscreen);
@@ -788,7 +530,7 @@ function boot(): void {
     if (e.key === 'Escape') select(null);
     else if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      openProviderLauncher();
+      openCopilotLauncher();
     } else if (e.key === 'ArrowRight') cycle(1);
     else if (e.key === 'ArrowLeft') cycle(-1);
     else if (e.key === 'PageDown' || (e.altKey && e.key === 'ArrowDown')) {
@@ -811,8 +553,6 @@ function boot(): void {
     render();
   });
   window.ua.onFocus((id) => {
-    const target = store.all.find((s) => s.id === id);
-    if (target?.provider && target.provider !== store.activeProvider) switchProvider(target.provider);
     select(id);
   });
   setInterval(() => void pollDetail(), 600);
@@ -827,37 +567,18 @@ async function start(): Promise<void> {
   const info = await window.ua.info();
   store.mode = info.mode;
   store.home = info.home;
-  store.availableProviders = info.providerKeys ?? [];
-  if (!store.availableProviders.includes(store.activeProvider) && store.availableProviders.length) {
-    store.activeProvider = store.availableProviders[0];
-    store.room = localStorage.getItem(`ua.room.${store.activeProvider}`) ?? '';
-  }
-  migrateCodexDefaultRoom();
-  localStorage.setItem('ua.provider', store.activeProvider);
-  localStorage.setItem(`ua.view.${store.activeProvider}`, store.view);
-  if (store.activeProvider === 'copilot' && store.room) localStorage.setItem('ua.room.copilot', store.room);
+  localStorage.setItem('ua.provider', 'copilot');
+  localStorage.setItem('ua.view.copilot', store.view);
+  if (store.room) localStorage.setItem('ua.room.copilot', store.room);
   const snap = await window.ua.list();
   store.all = snap.sessions;
   store.rooms = snap.rooms;
   announce(store.all);
   render();
-  let codexApiKeyConfigured = true;
-  if (store.mode !== 'demo' && store.activeProvider === 'codex') {
-    try { codexApiKeyConfigured = await window.ua.codexApiKeyStatus(); }
-    catch { codexApiKeyConfigured = false; }
-  }
-  if (store.mode !== 'demo' && store.activeProvider === 'codex' && !codexApiKeyConfigured) {
-    const launchOnReady = params.get('launch') === '1';
-    openApiKeyDialog(() => {
-      openProviderApp('codex');
-      if (launchOnReady) setTimeout(openProviderLauncher, 0);
-    });
-  } else if (store.mode !== 'demo') {
-    const hasSelectedSession = params.get('select') !== null && params.get('select') !== '';
-    if (hasSelectedSession || params.get('launch') === '1' || store.availableProviders.length < 2) openProviderApp(store.activeProvider);
-    else ($('provider-picker') as HTMLDialogElement).showModal();
-  }
-  if (params.get('launch') === '1' && ['copilot', 'codex'].includes(store.activeProvider) && (store.activeProvider !== 'codex' || codexApiKeyConfigured)) setTimeout(openProviderLauncher, 800);
+  if (store.mode !== 'demo') void window.ua.openCopilotApp().then((result) => {
+    if (!result.ok) toast(result.error ?? 'Could not open GitHub Copilot.', true);
+  });
+  if (params.get('launch') === '1') setTimeout(openCopilotLauncher, 800);
   const nums = (key: string): [number, number, number] | null => {
     const p = params.get(key)?.split(',').map(Number);
     return p && p.length === 3 && p.every(Number.isFinite) ? (p as [number, number, number]) : null;
